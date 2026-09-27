@@ -2,3 +2,5 @@ workspace/
 *.DS_STORE
 *.log
 logs/
+plots/*/data-run/
+plots/*/outputs/

@@ -1,0 +1,41 @@
+# Paths are relative to the project root; override with
+#   gnuplot -e "data_dir='...'; output_dir='...'" <script>
+if (!exists("script_dir")) script_dir = "plots/fig8/scripts"
+if (!exists("data_dir")) data_dir = "plots/fig8/data-paper"
+if (!exists("output_dir")) output_dir = "plots/fig8/outputs/paper"
+
+load script_dir."/style.gpi"
+
+# set terminal pdfcairo enhanced color
+# set output "memory_comparison.pdf"
+
+set terminal postscript eps enhanced color size 1.65in,1.35in font "Helvetica,10"
+set output output_dir."/fig8d-memory-utilization.eps"
+
+set style data histogram
+set style histogram clustered gap 1
+set style fill solid 0.8 border -1
+
+set boxwidth 0.9
+
+set ylabel "Memory Usage (MB)" 
+set xtics nomirror
+set bmargin 3
+
+# set xlabel "Component" 
+# set ylabel "Memory Usage (MB)" font "Helvetica, 16"
+# set xlabel "Component" font "Helvetica, 16"
+# set title "Memory Usage: Istio vs Mazu (50 RPS, 4min)" font "Helvetica, 16"
+
+set key top left
+# set key top left font "Helvetica, 12"
+# set xtics font "Helvetica, 12" rotate by 25 right
+# set ytics font "Helvetica, 12"
+
+set grid ytics lt 0 lw 0.5
+
+brk(s) = strstrt(s,"-") > 0 ? s[1:strstrt(s,"-")] . "\n" . s[strstrt(s,"-")+1:strlen(s)] : s
+strip(s) = strstrt(s,"/") > 0 ? s[strstrt(s,"/")+1:strlen(s)] : s
+
+plot data_dir."/plot_memory_avg.dat" every ::2 using 2:xtic(brk(strip(strcol(1)))) title columnheader(2) ls 1, \
+     '' every ::2 using 4 title columnheader(4) ls 2

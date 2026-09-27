@@ -1,0 +1,37 @@
+# Paths are relative to the project root; override with
+#   gnuplot -e "data_dir='...'; output_dir='...'" <script>
+if (!exists("script_dir")) script_dir = "plots/fig8/scripts"
+if (!exists("data_dir")) data_dir = "plots/fig8/data-paper"
+if (!exists("output_dir")) output_dir = "plots/fig8/outputs/paper"
+
+load script_dir."/style.gpi"
+
+# set terminal pdfcairo enhanced color
+# set output "e2e_latency_comparison.pdf"
+
+set terminal postscript eps enhanced color size 1.65in,1.35in font "Helvetica,10"
+set output output_dir."/fig8a-e2e-latency.eps"
+
+set style data histogram
+set style histogram clustered gap 1
+set style fill solid 0.8 border -1
+
+set boxwidth 0.9
+
+set ylabel "Latency (ms)" 
+# set xlabel "Percentile" 
+# set ylabel "Latency (ms)" font "Helvetica, 16"
+# set xlabel "Percentile" font "Helvetica, 16"
+# set title "End-to-End Latency: Istio vs Mazu (50 RPS, 4min)" font "Helvetica, 16"
+
+set key top left horizontal maxcols 2
+# set key top left font "Helvetica, 12"
+# set xtics font "Helvetica, 12"
+# set ytics font "Helvetica, 12"
+
+set grid ytics lt 0 lw 0.5
+
+set logscale y
+
+plot data_dir."/plot_e2e_latency_avg.dat" using 2:xtic(1) title "Istio" ls 1, \
+     '' using 4 title "Mazu" ls 2

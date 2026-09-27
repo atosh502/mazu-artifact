@@ -1,0 +1,33 @@
+# averaged over 10 runs, in this order:
+#    1. benchmark2-09-17-26_080502-run01
+#    2. benchmark2-09-17-26_081627-run02
+#    3. benchmark2-09-17-26_082741-run03
+#    4. benchmark2-09-17-26_083855-run04
+#    5. benchmark2-09-17-26_085012-run05
+#    6. benchmark2-09-17-26_090122-run06
+#    7. benchmark2-09-17-26_091232-run07
+#    8. benchmark2-09-17-26_092344-run08
+#    9. benchmark2-09-17-26_093502-run09
+#   10. benchmark2-09-17-26_094612-run10
+#
+# per-run values:
+#   app/fortio-client    Istio  20.25  21.4  19.92  20.68  21.89  20.06  21.42  19.29  21.01  21.07
+#   app/fortio-client    Mazu   20.68  20.61  19.78  20.5  19.22  19.6  20.9  19.92  20.38  21.1
+#   app/fortio-server    Istio  10.23  10.59  10.07  10.02  9.65  10.54  10.66  10.39  9.97  9.9
+#   app/fortio-server    Mazu   10.92  10.8  10.9  10.95  10.65  10.78  11  10.83  10.81  10.46
+#   proxy/fortio-client  Istio  40.89  40.61  40.97  38.83  40.67  40.19  41.25  40.12  42.3  38.4
+#   proxy/fortio-client  Mazu   46.68  52.37  52.78  51.9  48.97  49.83  51.42  50.04  49.58  52.08
+#   proxy/fortio-server  Istio  39.24  42.69  40.79  37.51  42.89  42.36  41.27  44.27  38.14  37.88
+#   proxy/fortio-server  Mazu   49.01  51.17  51.55  52.14  45.82  51.59  51.69  51.64  51.42  51.48
+#   istiod               Istio  51.65  53.46  53.47  48.94  52.81  50.97  48.97  51.56  47.57  52.61
+#   istiod               Mazu   99.36  116.51  114.82  100.89  120.7  111.03  104.2  110.76  105.04  105.51
+#   kube-apiserver       Istio  526.48  543.37  530.27  547.98  532.27  549  558.2  567.2  553.49  549.35
+#   kube-apiserver       Mazu   555.25  546.46  563.78  548.79  572.08  559.88  565.8  560.92  573.19  563.55
+#
+Component	Istio	Istio_stddev	Mazu	Mazu_stddev
+app/fortio-client	20.699000	0.807361	20.269000	0.609963
+app/fortio-server	10.202000	0.335155	10.810000	0.158254
+proxy/fortio-client	40.423000	1.135127	50.565000	1.897251
+proxy/fortio-server	40.704000	2.389868	50.751000	1.927696
+istiod	51.201000	2.067825	108.882000	7.022544
+kube-apiserver	545.761000	12.917881	560.970000	8.840836

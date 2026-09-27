@@ -15,18 +15,25 @@ usage() {
     echo "Usage: $0 [options]"
     echo ""
     echo "Options:"
-    echo "  --setup    Clone DeathStarBench under ./workspace and bootstrap socialNetwork"
-    echo "  -h, --help Show this help"
+    echo "  --setup      Clone DeathStarBench under ./workspace and bootstrap socialNetwork"
+    echo "  --fig8       Figure 8 (requires --plot-only for now)"
+    echo "  --plot-only  Only plot the selected figure(s) from the paper's data"
+    echo "  -h, --help   Show this help"
 }
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+MAZU_ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Parse flags before logging so bad input does not leave a log behind
 setup_flag=false
+fig8_flag=false
+plot_only_flag=false
 
 for arg in "$@"; do
     case $arg in
         --setup) setup_flag=true ;;
+        --fig8) fig8_flag=true ;;
+        --plot-only) plot_only_flag=true ;;
         -h|--help) usage; exit 0 ;;
         *)
             mazu_echo "Unknown option: $arg"
@@ -36,13 +43,18 @@ for arg in "$@"; do
     esac
 done
 
-if [[ "$setup_flag" == "false" ]]; then
+if [[ "$setup_flag" == "false" && "$fig8_flag" == "false" ]]; then
     usage
     exit 1
 fi
 
+if [[ "$fig8_flag" == "true" && "$plot_only_flag" == "false" ]]; then
+    mazu_echo "Running the fig8 experiment is not supported yet; use --fig8 --plot-only"
+    exit 1
+fi
+
 # Logging: mirror all output to logs/
-mazu_log_dir="$(dirname "$SCRIPT_DIR")/logs"
+mazu_log_dir="$MAZU_ROOT_DIR/logs"
 mkdir -p "$mazu_log_dir"
 mazu_log_name="benchmark-$(date +%Y%m%d-%H%M%S)-$(IFS=_; echo "${*#--}")"
 export MAZU_LOG_FILE="$mazu_log_dir/$mazu_log_name.log"
@@ -76,12 +88,45 @@ setup() {
     "$MAZU_SN_DIR/bootstrap.sh"
 }
 
+# Plots fig8 with the paper's gnuplot scripts. They emit EPS (as in the paper),
+# which is converted to PDF with ps2pdf.
+plot_fig8() {
+    local fig8_dir="$MAZU_ROOT_DIR/plots/fig8"
+    local data_dir="$fig8_dir/data-paper"
+    local output_dir="$fig8_dir/outputs/paper"
+
+    for cmd in gnuplot ps2pdf; do
+        if ! command -v $cmd &> /dev/null; then
+            mazu_echo "$cmd not found; install it with: sudo apt-get install -y gnuplot ghostscript"
+            exit 1
+        fi
+    done
+
+    mkdir -p "$output_dir"
+
+    for gpi in "$fig8_dir"/scripts/plot_cold_path_*.gpi; do
+        mazu_echo "Plotting $(basename "$gpi")"
+        gnuplot -e "script_dir='$fig8_dir/scripts'; data_dir='$data_dir'; output_dir='$output_dir'" "$gpi"
+    done
+
+    for eps in "$output_dir"/fig8*.eps; do
+        ps2pdf -dEPSCrop "$eps" "${eps%.eps}.pdf"
+        rm "$eps"
+    done
+
+    mazu_echo "Fig8 plots written to $output_dir"
+}
+
 mazu_echo "Start of Script"
 
 mazu_echo "Logging to $MAZU_LOG_FILE"
 
 if [[ "$setup_flag" == "true" ]]; then
     setup
+fi
+
+if [[ "$fig8_flag" == "true" ]]; then
+    plot_fig8
 fi
 
 mazu_echo "End of Script"
