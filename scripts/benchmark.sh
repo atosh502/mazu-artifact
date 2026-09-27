@@ -16,6 +16,7 @@ usage() {
     echo ""
     echo "Options:"
     echo "  --setup      Clone DeathStarBench under ./workspace and bootstrap socialNetwork"
+    echo "  --fig6       Figure 6 (requires --plot-only for now)"
     echo "  --fig7       Figure 7 (requires --plot-only for now)"
     echo "  --fig8       Figure 8 (requires --plot-only for now)"
     echo "  --plot-only  Only plot the selected figure(s) from the paper's data"
@@ -27,6 +28,7 @@ MAZU_ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Parse flags before logging so bad input does not leave a log behind
 setup_flag=false
+fig6_flag=false
 fig7_flag=false
 fig8_flag=false
 plot_only_flag=false
@@ -34,6 +36,7 @@ plot_only_flag=false
 for arg in "$@"; do
     case $arg in
         --setup) setup_flag=true ;;
+        --fig6) fig6_flag=true ;;
         --fig7) fig7_flag=true ;;
         --fig8) fig8_flag=true ;;
         --plot-only) plot_only_flag=true ;;
@@ -46,12 +49,12 @@ for arg in "$@"; do
     esac
 done
 
-if [[ "$setup_flag" == "false" && "$fig7_flag" == "false" && "$fig8_flag" == "false" ]]; then
+if [[ "$setup_flag" == "false" && "$fig6_flag" == "false" && "$fig7_flag" == "false" && "$fig8_flag" == "false" ]]; then
     usage
     exit 1
 fi
 
-for fig in fig7 fig8; do
+for fig in fig6 fig7 fig8; do
     fig_flag="${fig}_flag"
     if [[ "${!fig_flag}" == "true" && "$plot_only_flag" == "false" ]]; then
         mazu_echo "Running the $fig experiment is not supported yet; use --$fig --plot-only"
@@ -132,6 +135,10 @@ mazu_echo "Logging to $MAZU_LOG_FILE"
 
 if [[ "$setup_flag" == "true" ]]; then
     setup
+fi
+
+if [[ "$fig6_flag" == "true" ]]; then
+    plot_paper_fig fig6 "sn_*.gpi"
 fi
 
 if [[ "$fig7_flag" == "true" ]]; then

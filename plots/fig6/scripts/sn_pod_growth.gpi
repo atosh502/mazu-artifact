@@ -1,0 +1,32 @@
+# Paths are relative to the project root; override with
+#   gnuplot -e "data_dir='...'; output_dir='...'" <script>
+if (!exists("script_dir")) script_dir = "plots/fig6/scripts"
+if (!exists("data_dir")) data_dir = "plots/fig6/data-paper"
+if (!exists("output_dir")) output_dir = "plots/fig6/outputs/paper"
+
+load script_dir."/style.gpi"
+
+set terminal postscript eps enhanced color size 3.3in,2.7in font "Helvetica,20" linewidth 2 dashlength 2 pointscale 2
+set output output_dir."/fig6b-total-ready-pods.eps"
+
+set xlabel "Queries per second (QPS)"
+set ylabel "Ready pods"
+
+set key top left maxrows 3
+# set key off
+
+set grid ytics
+set tics nomirror
+
+set xrange [50:1250]
+set yrange [25:120]
+
+# set xtics (100, 200, 400, 600, 800, 1000, 1200)
+set xtics (200, 400, 600, 800, 1000, 1200)
+
+ISTIO_PODS_FILE = data_dir."/sn-pod-growth/plot_sn_pod_growth_pooled_istio.dat"
+MAZU_PODS_FILE = data_dir."/sn-pod-growth/plot_sn_pod_growth_pooled_mazu.dat"
+
+plot \
+    ISTIO_PODS_FILE using 1:2 title "Istio" with linespoints linestyle 1 linewidth 2 pointtype 5 pointsize 0.4 dashtype 1, \
+    MAZU_PODS_FILE  using 1:2 title "Mazu"  with linespoints linestyle 2 linewidth 2 pointtype 5 pointsize 0.4 dashtype 1

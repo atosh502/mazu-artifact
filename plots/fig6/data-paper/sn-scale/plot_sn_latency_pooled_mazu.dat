@@ -1,0 +1,53 @@
+# Ten repeat runs of this sweep pooled into one row per (strategy, RPS step).
+# Same columns as <run-dir>/plot_sn_latency.dat, plus n_runs and pooled_samples.
+# Written by cld_pool_sn_latency.py; read that file's docstring for the why.
+#
+# SOURCE     the ten <run-dir>/ directories beside this file, each already
+#            summarised by plot_sn_latency.py into its own plot_sn_latency.dat.
+#            Percentiles come from the "Detailed Percentile spectrum" block of
+#            <run-dir>/<strategy>/<rps>.txt; every other column is the sum of the
+#            ten per-run rows, taken from that script's own collect().
+# TRANSFORM  percentiles: POOLED HISTOGRAM, NOT A MEAN OF THE TEN PERCENTILES.
+#            Each run's spectrum is converted back to per-bucket counts by
+#            differencing the cumulative TotalCount column, the counts are summed
+#            across runs, and p50/p90/p99 are read off the pooled CDF by linear
+#            interpolation -- the merge HdrHistogram supports via add().
+#            Histograms are additive; percentiles are not, and the mean of ten
+#            p99s is not the p99 of the ten runs. pooled_samples is how many
+#            completed requests that pooled histogram holds.
+#            counts: shortfall / timeouts / non_2xx / offered_reqs /
+#            completed_reqs / duration_s are SUMMED over the ten runs, so a
+#            pooled step carries ten steps' worth of load. duration_s is
+#            therefore ~10x a single step, and offered_reqs = rps x duration_s
+#            still holds.
+#            percentages: RECOMPUTED FROM THE POOLED TOTALS (shortfall_pct =
+#            pooled shortfall / pooled offered x 100), never averaged from the
+#            per-run percentages.
+#            flagged = yes once the pooled shortfall_pct >= 1%.
+#            loss_basis is `mixed` if the ten runs did not all use the same one.
+# CAVEAT     pooling widens the sample, it does not narrow the spread: a step
+#            whose ten runs disagree gets one number here with no visible
+#            variance. Read this file next to the per-run plot_sn_latency.dat
+#            files, not instead of them.
+#            Everything the per-run file warns about still applies unchanged --
+#            in particular THE PERCENTILES DESCRIBE COMPLETED REQUESTS ONLY (wrk2
+#            drops a timed-out request before it reaches the histogram), and
+#            `timeouts` is a count of socket timeout EVENTS, not of requests, so
+#            timeout_pct can exceed shortfall_pct. Read p50/p90/p99 next to
+#            shortfall_pct on the same row, never on their own.
+# UNITS      latency in ms; *_pct in percent of offered load; counts in requests;
+#            duration_s in seconds (summed over the ten runs).
+# LAYOUT     written three times over the same rows: plot_sn_latency_pooled.dat
+#            holds both arms, and plot_sn_latency_pooled_istio.dat /
+#            plot_sn_latency_pooled_mazu.dat hold one arm each. The per-arm files
+#            are the combined file's rows split, not recomputed -- pooling is
+#            per (strategy, rps) to begin with, so no number changes. They keep
+#            the `strategy` column so a row read on its own still names its arm.
+# strategy	rps	p50_ms	p90_ms	p99_ms	shortfall	shortfall_pct	timeouts	timeout_pct	non_2xx	non_2xx_pct	offered_reqs	completed_reqs	duration_s	loss_basis	flagged	n_runs	pooled_samples
+Mazu	100	16.36	28.14	40.71	11398	4.749	34224	14.260	98	0.041	240000	228602	2400.00	shortfall	yes	10	218677
+Mazu	200	16.95	25.74	41.85	21086	4.393	7448	1.552	426	0.089	480000	458914	2400.00	shortfall	yes	10	439588
+Mazu	400	17.34	26.63	118.36	0	0.000	298	0.031	1599	0.167	960000	960669	2400.00	shortfall	no	10	920934
+Mazu	600	17.96	31.53	190.58	16995	1.180	39	0.003	3292	0.229	1440000	1423005	2400.00	shortfall	yes	10	1363967
+Mazu	800	19.42	42.17	283.64	0	0.000	0	0.000	13243	0.690	1920000	1923195	2400.00	shortfall	no	10	1843601
+Mazu	1000	2548.50	13805.27	32152.85	160451	6.685	0	0.000	9282	0.387	2400000	2239549	2400.00	shortfall	yes	10	2141662
+Mazu	1200	22333.05	47661.26	62931.50	659060	22.884	1	0.000	10545	0.366	2880000	2220940	2400.00	shortfall	yes	10	2107206

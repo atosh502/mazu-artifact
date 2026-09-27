@@ -1,0 +1,53 @@
+# Ten repeat runs of this sweep pooled into one row per (strategy, RPS step).
+# Same columns as <run-dir>/plot_sn_latency.dat, plus n_runs and pooled_samples.
+# Written by cld_pool_sn_latency.py; read that file's docstring for the why.
+#
+# SOURCE     the ten <run-dir>/ directories beside this file, each already
+#            summarised by plot_sn_latency.py into its own plot_sn_latency.dat.
+#            Percentiles come from the "Detailed Percentile spectrum" block of
+#            <run-dir>/<strategy>/<rps>.txt; every other column is the sum of the
+#            ten per-run rows, taken from that script's own collect().
+# TRANSFORM  percentiles: POOLED HISTOGRAM, NOT A MEAN OF THE TEN PERCENTILES.
+#            Each run's spectrum is converted back to per-bucket counts by
+#            differencing the cumulative TotalCount column, the counts are summed
+#            across runs, and p50/p90/p99 are read off the pooled CDF by linear
+#            interpolation -- the merge HdrHistogram supports via add().
+#            Histograms are additive; percentiles are not, and the mean of ten
+#            p99s is not the p99 of the ten runs. pooled_samples is how many
+#            completed requests that pooled histogram holds.
+#            counts: shortfall / timeouts / non_2xx / offered_reqs /
+#            completed_reqs / duration_s are SUMMED over the ten runs, so a
+#            pooled step carries ten steps' worth of load. duration_s is
+#            therefore ~10x a single step, and offered_reqs = rps x duration_s
+#            still holds.
+#            percentages: RECOMPUTED FROM THE POOLED TOTALS (shortfall_pct =
+#            pooled shortfall / pooled offered x 100), never averaged from the
+#            per-run percentages.
+#            flagged = yes once the pooled shortfall_pct >= 1%.
+#            loss_basis is `mixed` if the ten runs did not all use the same one.
+# CAVEAT     pooling widens the sample, it does not narrow the spread: a step
+#            whose ten runs disagree gets one number here with no visible
+#            variance. Read this file next to the per-run plot_sn_latency.dat
+#            files, not instead of them.
+#            Everything the per-run file warns about still applies unchanged --
+#            in particular THE PERCENTILES DESCRIBE COMPLETED REQUESTS ONLY (wrk2
+#            drops a timed-out request before it reaches the histogram), and
+#            `timeouts` is a count of socket timeout EVENTS, not of requests, so
+#            timeout_pct can exceed shortfall_pct. Read p50/p90/p99 next to
+#            shortfall_pct on the same row, never on their own.
+# UNITS      latency in ms; *_pct in percent of offered load; counts in requests;
+#            duration_s in seconds (summed over the ten runs).
+# LAYOUT     written three times over the same rows: plot_sn_latency_pooled.dat
+#            holds both arms, and plot_sn_latency_pooled_istio.dat /
+#            plot_sn_latency_pooled_mazu.dat hold one arm each. The per-arm files
+#            are the combined file's rows split, not recomputed -- pooling is
+#            per (strategy, rps) to begin with, so no number changes. They keep
+#            the `strategy` column so a row read on its own still names its arm.
+# strategy	rps	p50_ms	p90_ms	p99_ms	shortfall	shortfall_pct	timeouts	timeout_pct	non_2xx	non_2xx_pct	offered_reqs	completed_reqs	duration_s	loss_basis	flagged	n_runs	pooled_samples
+Istio	100	17.05	26.71	34.32	11406	4.752	34242	14.268	0	0.000	240000	228594	2400.00	shortfall	yes	10	218683
+Istio	200	17.41	26.22	36.46	21115	4.399	7462	1.555	0	0.000	480000	458885	2400.00	shortfall	yes	10	439570
+Istio	400	18.72	27.62	44.97	0	0.000	296	0.031	0	0.000	960000	960697	2400.00	shortfall	no	10	920937
+Istio	600	19.71	32.61	63.46	17136	1.190	39	0.003	3	0.000	1440000	1422864	2400.00	shortfall	yes	10	1364006
+Istio	800	114.62	1600.71	4201.78	11634	0.606	0	0.000	39	0.002	1920000	1908366	2400.00	shortfall	no	10	1828955
+Istio	1000	14621.62	34191.06	43308.12	404887	16.870	0	0.000	3	0.000	2400000	1995113	2400.00	shortfall	yes	10	1898859
+Istio	1200	33274.59	62402.15	72134.80	884061	30.697	0	0.000	6	0.000	2880000	1995939	2400.00	shortfall	yes	10	1883759

@@ -1,0 +1,56 @@
+# COMPONENT  istiod
+#
+# Ten repeat runs of this sweep reduced to mean +/- sd of the fleet-wide CPU for
+# ONE component, one row per RPS step, both arms side by side.
+# Written by cld_pool_sn_cpu.py; read that file's docstring for the why.
+#
+# SOURCE     the <run-dir>/plot_sn_cpu.dat files beside this one -- the same fleet-wide
+#            `totals.cpu.<component>` scalars plot_sn_resources.py already took
+#            from <run-dir>/<arm>/metrics_<rps>.json, each one a Prometheus
+#            instant vector already averaged over its load step's window. This
+#            file re-reads those .dat files rather than the raw JSON, so a row
+#            here is exactly the ten per-run rows averaged, with no second
+#            derivation that could drift from them.
+# TRANSFORM  MEAN ACROSS RUNS, not a sum: CPU-in-cores is intensive, so the ten
+#            runs measure the same rate ten times and the estimator is their
+#            mean. (cld_pool_sn_latency.py sums its request counts because those
+#            are extensive -- these files merge differently on purpose.)
+#            <arm>_sd is the SAMPLE standard deviation (n-1) of those same ten
+#            values -- the run-to-run spread left by an HPA feedback loop
+#            settling on a noisy signal. It is N/A where only one run measured
+#            the step, because one observation has no spread to report.
+#            ratio is RECOMPUTED FROM THE POOLED MEANS (Mazu/Istio), never
+#            averaged from the ten per-run ratio columns: mean(a/b) is not
+#            mean(a)/mean(b), and the per-run ratios diverge worst exactly where
+#            the denominator is smallest. N/A unless both arms have a mean and
+#            the Istio mean is non-zero.
+#            N/A rows in a per-run file are DROPPED from that cell, never read as
+#            0 -- n_Istio says how many runs are actually under each mean.
+# CAVEAT     read a mean next to its sd, never on its own: a gap between the arms
+#            at one step means nothing until it is larger than the spread of the
+#            runs behind it.
+#            Everything the per-run file warns about still applies -- in
+#            particular these are FLEET-WIDE sums, not per-pod averages, because
+#            under HPA the replica count differs between arms and steps and a
+#            per-pod average flatters whichever arm ran more replicas. Read this
+#            file next to plot_sn_pod_growth_pooled_<arm>.dat, which says how
+#            many pods each arm was paying for.
+# UNITS      CPU in cores.
+# LAYOUT     WHITESPACE-ALIGNED, and every cell is non-empty -- a missing
+#            value is the literal N/A, never a blank. gnuplot collapses a run of
+#            spaces into one separator, so a blank cell would silently shift
+#            every column after it into the wrong place (the tab-separated
+#            per-run .dat files can leave a field empty; these cannot).
+#            one row per RPS step; one file per component
+#            (plot_sn_cpu_pooled_<component>.dat). The component is named in
+#            the header block above, and the files are otherwise identical in
+#            shape. Columns 1-3 are rps and the per-arm means, so a plot
+#            reading `using 1:2:3` gets the arms and nothing else.
+# rps   Istio     Mazu      Istio_sd  Mazu_sd   ratio_Mazu_over_Istio  n_Istio  n_Mazu
+  100   0.010334  0.032463  0.001279  0.006079  3.141                  10       10
+  200   0.017668  0.070272  0.001960  0.010281  3.977                  10       10
+  400   0.035650  0.168981  0.001761  0.017442  4.740                  10       10
+  600   0.054372  0.268652  0.002726  0.017480  4.941                  10       10
+  800   0.074363  0.364022  0.004393  0.037753  4.895                  10       10
+  1000  0.078582  0.400912  0.004947  0.022065  5.102                  10       10
+  1200  0.077873  0.386311  0.006908  0.029022  4.961                  10       10

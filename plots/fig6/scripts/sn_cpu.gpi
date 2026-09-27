@@ -1,0 +1,124 @@
+# Paths are relative to the project root; override with
+#   gnuplot -e "data_dir='...'; output_dir='...'" <script>
+if (!exists("script_dir")) script_dir = "plots/fig6/scripts"
+if (!exists("data_dir")) data_dir = "plots/fig6/data-paper"
+if (!exists("output_dir")) output_dir = "plots/fig6/outputs/paper"
+
+load script_dir."/style.gpi"
+
+set terminal postscript eps enhanced color size 3.3in,2.7in font "Helvetica,20" linewidth 2 dashlength 2 pointscale 2
+set output output_dir."/fig6c-cpu-utilization.eps"
+
+# Per-RPS slice of plot_sn_cpu.gpi: one cluster per load step, six bars per
+# cluster -- the three components, each as an adjacent Istio/Mazu pair.
+# Add load steps by listing them (they become extra clusters):
+#   gnuplot -e 'RPS_LIST="400 800"' plot_sn_cpu_400.gpi
+if (!exists("RPS_LIST")) RPS_LIST = "400 800 1000"
+RPS_TAG = system(sprintf("echo '%s' | tr ' ' '_'", RPS_LIST))
+
+# pivot_cpu.awk pulls the wanted rows out of the same source files the full
+# sweep plot uses, so the numbers never drift from plot_sn_cpu.dat.
+# Columns: 2/3 proxy, 4/5 istiod, 6/7 apiserver -- Istio then Mazu.
+SN_DIR = data_dir."/sn-scale"
+DATA = sprintf("< awk -v want='%s' -f '%s/cpu/pivot_cpu.awk' \
+    '%s/cpu/plot_sn_cpu_pooled_proxy.dat' \
+    '%s/cpu/plot_sn_cpu_pooled_istiod.dat' \
+    '%s/cpu/plot_sn_cpu_pooled_kube_apiserver.dat'", \
+    RPS_LIST, SN_DIR, SN_DIR, SN_DIR, SN_DIR)
+
+# Color encodes the component, fill pattern encodes the arm: Istio a sparse
+# diagonal, Mazu a dense crosshatch in the same color, so each adjacent pair
+# reads as one comparison and the figure needs only three hues.
+C_PROXY  = "#77AADD"
+C_ISTIOD = "#EE8866"
+C_API    = "#44BB99"
+# The cairo terminals expose 8 distinct patterns and cycle after that:
+# 0 empty, 1 crosshatch, 2 dense crosshatch, 3 solid, 4-7 diagonals.
+ISTIO_PAT = 5
+MAZU_PAT  = 2
+
+set style data histograms
+set style histogram clustered gap 2
+set style fill solid 1.0 border linecolor rgb "#404040"
+set boxwidth 0.9 relative
+# A gnuplot fill is either solid *or* pattern, never both, so the bars are
+# drawn twice: once solid in the component hue, then again as "transparent
+# pattern" boxes at the same x, which hatch over the color without painting
+# a background. The overlay pass sits between the bars and the labels below.
+SOLID    = "fillstyle solid 1.0 border linecolor rgb '#404040'"
+ISTIO_FS = sprintf("fillstyle transparent pattern %d border linecolor rgb '#404040'", ISTIO_PAT)
+MAZU_FS  = sprintf("fillstyle transparent pattern %d border linecolor rgb '#404040'", MAZU_PAT)
+
+set border
+set tics nomirror
+set grid ytics
+
+set key outside top left horizontal maxcols 5 maxrows 2 samplen 2 width -6
+# set key off
+
+set xlabel "Queries per second (QPS)"
+set ylabel "CPU (cores)"
+
+# The three components span two orders of magnitude (proxies ~4 cores vs
+# istiod ~0.04), so a linear axis would flatten istiod into the baseline.
+# Log axis keeps all six bars readable; compare the printed values, since
+# bar *heights* on a log axis are not proportional.
+set logscale y
+
+set yrange [0.01:80]
+set format y "%.2h"
+
+# With N bars and gap G per cluster, bar i sits at clustercenter+(i-(N+1)/2)/(N+G).
+N = 6 ; G = 2
+off(i) = (i - (N + 1) / 2.0) / (N + G)
+# Midpoint between bar i and bar i+1, i.e. between an Istio/Mazu pair.
+mid(c)   = (off(c-1) + off(c)) / 2.0
+top(a,b) = (a > b ? a : b)
+ratio(a,b) = sprintf("%.1fx", b / a)
+# Width of one histogram bar in x units, passed as a third column to the
+# overlay boxes so the global "boxwidth ... relative" stays untouched.
+BW = 0.9 / (N + G)
+# Even data columns (2,4,6) are the Istio arm, odd ones (3,5,7) are Mazu.
+PAT(c) = (c % 2 == 0) ? ISTIO_PAT : MAZU_PAT
+lbl(v) = sprintf("%.2f", v)
+
+# Left-to-right bar order within a cluster, as data column numbers.
+# Columns: 2/3 proxy, 4/5 istiod, 6/7 apiserver -- Istio then Mazu.
+BAR_ORDER = "2 3 6 7 4 5"
+col(i) = int(word(BAR_ORDER, i))
+# Position (1..N) of a given data column in BAR_ORDER.
+pos(c) = sum [i=1:N] (col(i) == c ? i : 0)
+COLOR(c) = (c <= 3) ? C_PROXY : (c <= 5) ? C_ISTIOD : C_API
+
+# plot \
+#     DATA using 2:xtic(1) notitle linecolor rgb C_PROXY  @SOLID, \
+#     DATA using 3         notitle linecolor rgb C_PROXY  @SOLID, \
+#     DATA using 4         notitle linecolor rgb C_ISTIOD @SOLID, \
+#     DATA using 5         notitle linecolor rgb C_ISTIOD @SOLID, \
+#     DATA using 6         notitle linecolor rgb C_API    @SOLID, \
+#     DATA using 7         notitle linecolor rgb C_API    @SOLID, \
+#     for [c=2:7] DATA using ($0+off(c-1)):c:(BW) with boxes notitle \
+#         linecolor rgb "#404040" \
+#         fillstyle transparent pattern PAT(c) border linecolor rgb "#404040", \
+#     for [c=4:4:2] DATA using ($0+mid(c)):(top(column(c),column(c+1))*1.3):(ratio(column(c),column(c+1))) \
+#         with labels rotate by 75 font ",16" left textcolor rgb "#606060" notitle, \
+#     keyentry with boxes @SOLID    linecolor rgb C_PROXY  title "istio-proxy", \
+#     keyentry with boxes @SOLID    linecolor rgb C_ISTIOD title "istiod", \
+#     keyentry with boxes @SOLID    linecolor rgb C_API    title "kube-apiserver", \
+#     keyentry with boxes @ISTIO_FS linecolor rgb "#404040" title "Istio", \
+#     keyentry with boxes @MAZU_FS  linecolor rgb "#404040" title "Mazu"
+
+# changes the order such that multipliers above histogram bars are not clipped
+plot \
+    for [i=1:N] DATA using (column(col(i))):xtic(1) notitle \
+        linecolor rgb COLOR(col(i)) @SOLID, \
+    for [i=1:N] DATA using ($0+off(i)):(column(col(i))):(BW) with boxes notitle \
+        linecolor rgb "#404040" \
+        fillstyle transparent pattern PAT(col(i)) border linecolor rgb "#404040", \
+    DATA using ($0+(off(pos(4))+off(pos(5)))/2.0):(top($4,$5)*1.3):(ratio($4,$5)) \
+        with labels rotate by 75 font ",16" left textcolor rgb "#606060" notitle, \
+    keyentry with boxes @SOLID    linecolor rgb C_PROXY  title "sidecar-proxy", \
+    keyentry with boxes @SOLID    linecolor rgb C_API    title "kube-apiserver", \
+    keyentry with boxes @SOLID    linecolor rgb C_ISTIOD title "istiod", \
+    keyentry with boxes @ISTIO_FS linecolor rgb "#404040" title "Istio", \
+    keyentry with boxes @MAZU_FS  linecolor rgb "#404040" title "Mazu"

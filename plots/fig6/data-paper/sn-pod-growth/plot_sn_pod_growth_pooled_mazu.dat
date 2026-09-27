@@ -1,0 +1,41 @@
+# ARM  Mazu
+#
+# Ten repeat runs of this sweep reduced to mean +/- sd of the pod fleet, one row
+# per RPS step, one file per arm.
+# Written by cld_pool_sn_pods.py; read that file's docstring for the why.
+#
+# SOURCE     the <run-dir>/plot_sn_pod_growth.dat files beside this one -- the same
+#            settled/peak numbers plot_sn_pods.py already derived from
+#            <run-dir>/<arm>/pods-<rps>-sum.csv, where a pod counts only when it
+#            is BOTH phase=Running AND ready=True. This file re-reads those .dat
+#            files rather than the raw CSVs, so a row here is exactly the ten
+#            per-run rows averaged, with no second derivation that could drift
+#            from them.
+# TRANSFORM  MEAN ACROSS RUNS, not a sum: pod counts are intensive, so ten runs
+#            measure the same fleet size ten times and the estimator is their
+#            mean. (cld_pool_sn_latency.py sums its request counts because those
+#            are extensive -- the two files merge differently on purpose.)
+#            *_sd is the SAMPLE standard deviation (n-1) of those same ten
+#            values: the run-to-run spread of an HPA feedback loop settling on a
+#            noisy signal. It is blank where only one run measured the step,
+#            because a single observation has no spread to report.
+#            settled = the fleet each run ENDED the step with; peak = the largest
+#            fleet each run reached during it. Both are averaged independently,
+#            so settled_mean <= peak_mean but the pair no longer belongs to any
+#            single run.
+# CAVEAT     read settled_mean next to settled_sd, never on its own -- a gap
+#            between the two arms at one step means nothing until it is larger
+#            than the spread of the runs behind it. n_runs says how many runs are
+#            actually under each mean.
+# UNITS      ready pods, summed over every service in the chart.
+# LAYOUT     one row per RPS step; one file per arm
+#            (plot_sn_pod_growth_pooled_<arm>.dat). The arm is named in the
+#            header block above, and the files are otherwise identical in shape.
+# rps	settled_mean	settled_sd	peak_mean	peak_sd	n_runs
+100	32.20	1.14	32.20	1.14	10
+200	40.30	1.77	40.30	1.77	10
+400	60.50	2.07	60.50	2.07	10
+600	80.30	2.71	80.30	2.71	10
+800	102.30	5.74	102.30	5.74	10
+1000	111.00	2.26	111.00	2.26	10
+1200	109.90	3.54	109.90	3.54	10
