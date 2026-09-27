@@ -1,3 +1,4 @@
 workspace/
 *.DS_STORE
 *.log
+logs/

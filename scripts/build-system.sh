@@ -13,9 +13,25 @@ mazu_echo() {
     echo -e "\e[1;30;44mMazu:\e[0m $input_text."
 }
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+# Logging: mirror all output to logs/; skipped when re-run under sg so one run keeps one log
+if [[ -z "${MAZU_LOG_FILE:-}" ]]; then
+    mazu_log_dir="$(dirname "$SCRIPT_DIR")/logs"
+    mkdir -p "$mazu_log_dir"
+    mazu_log_name="build-system-$(date +%Y%m%d-%H%M%S)"
+    if [[ $# -gt 0 ]]; then
+        mazu_log_name+="-$(IFS=_; echo "$*")"
+    fi
+    export MAZU_LOG_FILE="$mazu_log_dir/$mazu_log_name.log"
+    exec > >(tee -a "$MAZU_LOG_FILE") 2>&1
+fi
+
 # Initialization
 
 mazu_echo "Start of Script"
+
+mazu_echo "Logging to $MAZU_LOG_FILE"
 
 mazu_echo "Initializing variables from input flags"
 
@@ -45,8 +61,6 @@ done
 
 # Setup environment
 mazu_echo "Setting up enviroment"
-
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # Check host prerequisites; Docker Hub login is only needed to push Istio images
 bootstrap_args=()
