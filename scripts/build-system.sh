@@ -76,7 +76,6 @@ export MAZU_ISTIO_TMP_DIR="$MAZU_ISTIO_DIR/out/tmp"
 export MAZU_ENVOY_OUTPUT_FILENAME="${MAZU_ENVOY_OUTPUT_FILENAME:-envoy}"
 export MAZU_USE_LOCAL_ENVOY=1
 
-export GOCACHE="$HOME/.cache/go-build"
 export DOCKER_USER="${DOCKER_USER:-}"
 export HUB="docker.io/$DOCKER_USER"
 export TAG="${TAG:-st5-AttUpd}"
