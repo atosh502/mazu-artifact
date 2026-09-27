@@ -84,6 +84,7 @@ export MAZU_WORKSPACE_DIR="$PWD/workspace"
 export MAZU_ISTIO_DIR="$MAZU_WORKSPACE_DIR/istio"
 export MAZU_PROXY_DIR="$MAZU_WORKSPACE_DIR/proxy"
 export MAZU_ENVOY_DIR="$MAZU_PROXY_DIR/envoy"
+export MAZU_DSB_DIR="$MAZU_WORKSPACE_DIR/DeathStarBench"
 
 export MAZU_PROXY_OUT_DIR="$MAZU_PROXY_DIR/out/linux_amd64"
 export MAZU_ISTIO_TMP_DIR="$MAZU_ISTIO_DIR/out/tmp"
@@ -135,6 +136,16 @@ if [[ ! -d $MAZU_ENVOY_DIR ]]; then
 else
     mazu_echo "Pulling Envoy repo"
     git -C $MAZU_ENVOY_DIR pull
+fi
+
+if [[ ! -d $MAZU_DSB_DIR ]]; then
+    mazu_echo "Cloning DeathStarBench repo"
+    git clone https://github.com/etclab/DeathStarBench.git $MAZU_DSB_DIR
+    git -C $MAZU_DSB_DIR fetch
+    git -C $MAZU_DSB_DIR switch "cloudlab-dev"
+else
+    mazu_echo "Pulling DeathStarBench repo"
+    git -C $MAZU_DSB_DIR pull
 fi
 
 if [[ "$build_envoy_flag" == "true" || "$config_system" == "true" ]]; then
