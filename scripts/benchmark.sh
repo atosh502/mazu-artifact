@@ -18,8 +18,10 @@ usage() {
     echo "  --setup      Clone DeathStarBench under ./workspace and bootstrap socialNetwork"
     echo "  --fig6       Figure 6 (requires --plot-only for now)"
     echo "  --fig7       Figure 7 (requires --plot-only for now)"
-    echo "  --fig8       Figure 8 (requires --plot-only for now)"
+    echo "  --fig8       Figure 8 (requires --plot-only or --run)"
     echo "  --plot-only  Only plot the selected figure(s) from the paper's data"
+    echo "  --run        Run a short, single-run benchmark for the selected figure(s)"
+    echo "               (a correctness check, not the paper's 10-run average)"
     echo "  -h, --help   Show this help"
 }
 
@@ -32,6 +34,7 @@ fig6_flag=false
 fig7_flag=false
 fig8_flag=false
 plot_only_flag=false
+run_flag=false
 
 for arg in "$@"; do
     case $arg in
@@ -40,6 +43,7 @@ for arg in "$@"; do
         --fig7) fig7_flag=true ;;
         --fig8) fig8_flag=true ;;
         --plot-only) plot_only_flag=true ;;
+        --run) run_flag=true ;;
         -h|--help) usage; exit 0 ;;
         *)
             mazu_echo "Unknown option: $arg"
@@ -54,10 +58,20 @@ if [[ "$setup_flag" == "false" && "$fig6_flag" == "false" && "$fig7_flag" == "fa
     exit 1
 fi
 
+if [[ "$plot_only_flag" == "true" && "$run_flag" == "true" ]]; then
+    mazu_echo "--plot-only and --run are mutually exclusive"
+    exit 1
+fi
+
 for fig in fig6 fig7 fig8; do
     fig_flag="${fig}_flag"
-    if [[ "${!fig_flag}" == "true" && "$plot_only_flag" == "false" ]]; then
+    [[ "${!fig_flag}" == "true" ]] || continue
+    if [[ "$run_flag" == "true" && "$fig" != "fig8" ]]; then
         mazu_echo "Running the $fig experiment is not supported yet; use --$fig --plot-only"
+        exit 1
+    fi
+    if [[ "$plot_only_flag" == "false" && "$run_flag" == "false" ]]; then
+        mazu_echo "Select --plot-only or --run for --$fig"
         exit 1
     fi
 done
@@ -99,13 +113,16 @@ setup() {
 
 # Plots a figure with the paper's gnuplot scripts under plots/<fig>/scripts.
 # They emit EPS (as in the paper), which is converted to PDF with ps2pdf.
-#   $1 = figure name (e.g. fig8), $2 = glob of the scripts to run
-plot_paper_fig() {
+#   $1 = figure name (e.g. fig8), $2 = glob of the scripts to run,
+#   $3 = data variant: paper (default) reads data-paper/ and writes
+#        outputs/paper/, run reads data-run/ and writes outputs/run/
+plot_fig() {
     local fig=$1
     local script_glob=$2
+    local variant=${3:-paper}
     local fig_dir="$MAZU_ROOT_DIR/plots/$fig"
-    local data_dir="$fig_dir/data-paper"
-    local output_dir="$fig_dir/outputs/paper"
+    local data_dir="$fig_dir/data-$variant"
+    local output_dir="$fig_dir/outputs/$variant"
 
     for cmd in gnuplot ps2pdf; do
         if ! command -v $cmd &> /dev/null; then
@@ -129,6 +146,79 @@ plot_paper_fig() {
     mazu_echo "${fig^} plots written to $output_dir"
 }
 
+# Figure 8: a single short run of DeathStarBench's run-benchmark2.sh (Istio vs
+# Mazu st5-AttUpd, fortio at 100 RPS). The paper averages 10 runs of 240s each
+# (see results/benchmark2-10runs-*); this is only a correctness run. The run's
+# plot_*.dat files are "averaged" over that one run with the paper's
+# cld_avg_data.py (stddev 0), so the paper's gnuplot scripts plot them as-is.
+#   outputs/run/raw/  everything run-benchmark2.sh writes
+#   data-run/         plot_*_avg.dat, as in data-paper/
+#   outputs/run/      fig8*.pdf, named as in outputs/paper/
+#   MAZU_RUN_DURATION overrides the load duration in seconds (default: 60)
+FIG8_METRICS=(cpu memory e2e_latency latency_breakdown_v2)
+
+run_fig8() {
+    local fig_dir="$MAZU_ROOT_DIR/plots/fig8"
+    local data_dir="$fig_dir/data-run"
+    local output_dir="$fig_dir/outputs/run"
+    local raw_dir="$output_dir/raw"
+    # cld_avg_data.py averages every *run*/ directory under raw/
+    local run_dir="$raw_dir/benchmark2-run01"
+    local duration=${MAZU_RUN_DURATION:-60}
+
+    if [[ ! -x "$MAZU_SN_DIR/run-benchmark2.sh" ]]; then
+        mazu_echo "$MAZU_SN_DIR/run-benchmark2.sh not found; run with --setup first"
+        exit 1
+    fi
+
+    # Both directories only ever hold the output of the previous run
+    mazu_echo "Clearing $data_dir and $output_dir"
+    rm -rf "$data_dir" "$output_dir"
+    mkdir -p "$data_dir" "$run_dir"
+
+    # run-benchmark2.sh reaches the TPM nodes by name (node-0 node-1), which
+    # not every experiment resolves; default to the control-plane InternalIPs
+    if [[ -z "${TPM_NODES:-}" ]]; then
+        TPM_NODES=$(kubectl get nodes -l node-role.kubernetes.io/control-plane \
+            -o jsonpath='{range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{" "}{end}')
+        export TPM_NODES="${TPM_NODES% }"
+    fi
+    mazu_echo "TPM nodes: $TPM_NODES"
+
+    mazu_echo "Running benchmark2 for ${duration}s, results in $run_dir"
+    # Run from socialNetwork: install-mazu writes istio-install-config.yaml to the cwd
+    (cd "$MAZU_SN_DIR" && DURATION=$duration RESULTS_DIR="$run_dir" ./run-benchmark2.sh)
+
+    average_fig8_run "$raw_dir" "$data_dir"
+    plot_fig fig8 "plot_cold_path_*.gpi" run
+}
+
+# Writes data-run/plot_<metric>_avg.dat from the runs under outputs/run/raw
+#   $1 = raw dir holding the *run*/ directories, $2 = data dir
+average_fig8_run() {
+    local raw_dir=$1
+    local data_dir=$2
+    local avg_script="$MAZU_SN_DIR/results/benchmark2-10runs-09-17-26_080502/cld_avg_data.py"
+
+    local missing=false
+    for metric in "${FIG8_METRICS[@]}"; do
+        if ! compgen -G "$raw_dir/*run*/plot_$metric.dat" > /dev/null; then
+            mazu_echo "Missing plot_$metric.dat under $raw_dir"
+            missing=true
+        fi
+    done
+    if [[ "$missing" == "true" ]]; then
+        mazu_echo "Figure 8 run is incomplete; see the run.log files under $raw_dir"
+        exit 1
+    fi
+
+    for metric in "${FIG8_METRICS[@]}"; do
+        python3 "$avg_script" "$raw_dir" -m "$metric" -o "$data_dir/plot_${metric}_avg.dat"
+    done
+
+    mazu_echo "Figure 8 data written to $data_dir"
+}
+
 mazu_echo "Start of Script"
 
 mazu_echo "Logging to $MAZU_LOG_FILE"
@@ -138,15 +228,19 @@ if [[ "$setup_flag" == "true" ]]; then
 fi
 
 if [[ "$fig6_flag" == "true" ]]; then
-    plot_paper_fig fig6 "sn_*.gpi"
+    plot_fig fig6 "sn_*.gpi"
 fi
 
 if [[ "$fig7_flag" == "true" ]]; then
-    plot_paper_fig fig7 "fixed-resource-*.gpi"
+    plot_fig fig7 "fixed-resource-*.gpi"
 fi
 
 if [[ "$fig8_flag" == "true" ]]; then
-    plot_paper_fig fig8 "plot_cold_path_*.gpi"
+    if [[ "$run_flag" == "true" ]]; then
+        run_fig8
+    else
+        plot_fig fig8 "plot_cold_path_*.gpi"
+    fi
 fi
 
 mazu_echo "End of Script"

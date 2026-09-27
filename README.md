@@ -10,7 +10,13 @@
         - In case of `permission denied error with docker`, either run: `newgrp docker` or logout and log back in.
     - (Note: the next step can be skipped as the required images have been built and publicly available under docker user: `atosh502`. Use the below steps for creating the images from source and hosting it under a different docker user registry.)
     - In order to build and host images in Docker: `DOCKER_USER=<user-id> ./scripts/setup-system.sh configure build-envoy build-istio`
-        - Duration: ~30mins, Size: ~50GB
+        - Duration: ~30mins, Size: ~50GB.
 
-2. Step 1: Setup benchmarks
+2. Step 1: Setup and run benchmarks
     - Run `./scripts/benchmark.sh` to clone required source files and benchmark scripts under: `./workspace`
+    - For plotting the figures from paper without running the experiment:
+        - Use: `./scripts/benchmark.sh --plot-only --figX` where figX can be `fig6, fig7 or fig8`.
+        - The output figures will be written to: `./plots/figX/outputs/paper`.
+    - For running a small scale version of the experiments and generate the figures:
+        - Use: `./scripts/benchmark.sh --run --figX` where figX can be `fig6, fig7 or fig8`.
+        - The output figures will be written to: `./plots/figX/outputs/run`
