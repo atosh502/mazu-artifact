@@ -24,6 +24,7 @@ config_system=false
 build_envoy_flag=false
 build_istio_flag=false
 clean_flag=false
+skip_docker_login_flag=false
 
 # eval related
 perf_setup_istio_flag=false
@@ -35,6 +36,7 @@ for cmd in "$@"; do
         build-envoy) build_envoy_flag=true ;;
         build-istio) build_istio_flag=true ;;
         clean) clean_flag=true ;;
+        skip-docker-login) skip_docker_login_flag=true ;;
         *) 
             mazu_echo "Unknown command: $cmd"
             ;;
@@ -46,6 +48,24 @@ mazu_echo "Setting up enviroment"
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
+# Check host prerequisites; Docker Hub login is only needed to push Istio images
+bootstrap_args=()
+if [[ "$skip_docker_login_flag" == "true" || ( "$build_istio_flag" == "false" && "$config_system" == "false" ) ]]; then
+    bootstrap_args+=(--skip-docker-login)
+fi
+"$SCRIPT_DIR/bootstrap.sh" "${bootstrap_args[@]}"
+
+# bootstrap.sh may have just added us to the docker group; re-run under sg so docker works without a re-login
+if ! id -nG | tr ' ' '\n' | grep -qx docker; then
+    if [[ -n "${MAZU_SG_REEXEC:-}" ]]; then
+        mazu_echo "Could not activate the docker group with sg; log out and back in, then re-run"
+        exit 1
+    fi
+    mazu_echo "Re-running with the docker group active"
+    exec sg docker -c "MAZU_SG_REEXEC=1 $(printf '%q ' "$BASH" "${BASH_SOURCE[0]}" "$@")"
+fi
+
+export PATH="$PATH:/usr/local/go/bin"
 export MAZU_WORKSPACE_DIR="$PWD/workspace"
 export MAZU_ISTIO_DIR="$MAZU_WORKSPACE_DIR/istio"
 export MAZU_PROXY_DIR="$MAZU_WORKSPACE_DIR/proxy"
@@ -109,14 +129,14 @@ if [[ "$build_envoy_flag" == "true" || "$config_system" == "true" ]]; then
 
     if [[ "$clean_flag" == "true" ]]; then
         mazu_echo "Bulding Envoy - 'make clean'"
-        sudo BUILD_WITH_CONTAINER=1 make clean
+        BUILD_WITH_CONTAINER=1 make clean
     fi
 
     mazu_echo "Bulding Envoy - 'make build'"
-    sudo BUILD_WITH_CONTAINER=1 BAZEL_CONFIG_CURRENT=--config=release make build
+    BUILD_WITH_CONTAINER=1 BAZEL_CONFIG_CURRENT=--config=release make build
 
     mazu_echo "Bulding Envoy - 'make exportcache'"
-    sudo BUILD_WITH_CONTAINER=1 BAZEL_CONFIG_CURRENT=--config=release make exportcache
+    BUILD_WITH_CONTAINER=1 BAZEL_CONFIG_CURRENT=--config=release make exportcache
     
     mkdir -p "$MAZU_ISTIO_TMP_DIR"
     cp -f "$MAZU_PROXY_OUT_DIR/envoy" "$MAZU_ISTIO_TMP_DIR/$MAZU_ENVOY_OUTPUT_FILENAME"
