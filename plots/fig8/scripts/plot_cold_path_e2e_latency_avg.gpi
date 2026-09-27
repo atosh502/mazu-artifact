@@ -9,7 +9,7 @@ load script_dir."/style.gpi"
 # set terminal pdfcairo enhanced color
 # set output "e2e_latency_comparison.pdf"
 
-set terminal postscript eps enhanced color size 1.65in,1.35in font "Helvetica,10"
+set terminal postscript eps enhanced color size 3.3in,2.7in font "Helvetica,20" linewidth 2 dashlength 2 pointscale 2
 set output output_dir."/fig8a-e2e-latency.eps"
 
 set style data histogram

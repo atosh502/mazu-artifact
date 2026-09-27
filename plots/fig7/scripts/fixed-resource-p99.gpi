@@ -1,0 +1,45 @@
+# Paths are relative to the project root; override with
+#   gnuplot -e "data_dir='...'; output_dir='...'" <script>
+if (!exists("script_dir")) script_dir = "plots/fig7/scripts"
+if (!exists("data_dir")) data_dir = "plots/fig7/data-paper"
+if (!exists("output_dir")) output_dir = "plots/fig7/outputs/paper"
+
+load script_dir."/style.gpi"
+
+set terminal postscript eps enhanced color size 3.3in,2.7in font "Helvetica,20" linewidth 2 dashlength 2 pointscale 2
+set output output_dir."/fig7a-p99-latency.eps"
+
+set xlabel "Queries per second (QPS)"
+set ylabel "p99 latency (ms)"
+
+set logscale x
+set logscale y
+
+set xrange [90:2300]
+set xtics (100, 200, 400, 800, 1200, 2000)
+# set xtics (200, 400, 600, 800, 1000, 1200)
+
+set format y "%.0s%c"  # 10000 -> 10k
+set grid ytics
+set ytics
+set tics nomirror
+
+# set key top left maxrows 1 width 0.5 spacing 0.4
+set key outside top center maxrows 2
+set key width -2
+set key spacing 1
+
+DATA = data_dir."/pooled_latency_by_scale.dat"
+
+plot \
+    keyentry with lines linestyle 1 linewidth 2 title "Istio", \
+    keyentry with lines linestyle 2 linewidth 2 title "Mazu", \
+    keyentry with linespoints linecolor rgb "black" linewidth 2 pointtype 7 pointsize 0.4 dashtype 1 title "1x", \
+    keyentry with linespoints linecolor rgb "black" linewidth 2 pointtype 7 pointsize 0.4 dashtype (5,2.5) title "4x", \
+    keyentry with linespoints linecolor rgb "black" linewidth 2 pointtype 7 pointsize 0.4 dashtype (1,2) title "16x", \
+    DATA using 1:26  notitle with linespoints linestyle 1 pointtype 7 pointsize 0.4 linewidth 2 dashtype 1, \
+    DATA using 1:30 notitle with linespoints linestyle 1 pointtype 7 pointsize 0.4 linewidth 2 dashtype (5,2.5), \
+    DATA using 1:34 notitle with linespoints linestyle 1 pointtype 7 pointsize 0.4 linewidth 2 dashtype (1,2), \
+    DATA using 1:27  notitle with linespoints linestyle 2 pointtype 7 pointsize 0.4 linewidth 2 dashtype 1, \
+    DATA using 1:31 notitle with linespoints linestyle 2 pointtype 7 pointsize 0.4 linewidth 2 dashtype (5,2.5), \
+    DATA using 1:35 notitle with linespoints linestyle 2 pointtype 7 pointsize 0.4 linewidth 2 dashtype (1,2)

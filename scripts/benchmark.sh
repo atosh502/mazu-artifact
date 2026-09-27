@@ -16,6 +16,7 @@ usage() {
     echo ""
     echo "Options:"
     echo "  --setup      Clone DeathStarBench under ./workspace and bootstrap socialNetwork"
+    echo "  --fig7       Figure 7 (requires --plot-only for now)"
     echo "  --fig8       Figure 8 (requires --plot-only for now)"
     echo "  --plot-only  Only plot the selected figure(s) from the paper's data"
     echo "  -h, --help   Show this help"
@@ -26,12 +27,14 @@ MAZU_ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Parse flags before logging so bad input does not leave a log behind
 setup_flag=false
+fig7_flag=false
 fig8_flag=false
 plot_only_flag=false
 
 for arg in "$@"; do
     case $arg in
         --setup) setup_flag=true ;;
+        --fig7) fig7_flag=true ;;
         --fig8) fig8_flag=true ;;
         --plot-only) plot_only_flag=true ;;
         -h|--help) usage; exit 0 ;;
@@ -43,15 +46,18 @@ for arg in "$@"; do
     esac
 done
 
-if [[ "$setup_flag" == "false" && "$fig8_flag" == "false" ]]; then
+if [[ "$setup_flag" == "false" && "$fig7_flag" == "false" && "$fig8_flag" == "false" ]]; then
     usage
     exit 1
 fi
 
-if [[ "$fig8_flag" == "true" && "$plot_only_flag" == "false" ]]; then
-    mazu_echo "Running the fig8 experiment is not supported yet; use --fig8 --plot-only"
-    exit 1
-fi
+for fig in fig7 fig8; do
+    fig_flag="${fig}_flag"
+    if [[ "${!fig_flag}" == "true" && "$plot_only_flag" == "false" ]]; then
+        mazu_echo "Running the $fig experiment is not supported yet; use --$fig --plot-only"
+        exit 1
+    fi
+done
 
 # Logging: mirror all output to logs/
 mazu_log_dir="$MAZU_ROOT_DIR/logs"
@@ -88,12 +94,15 @@ setup() {
     "$MAZU_SN_DIR/bootstrap.sh"
 }
 
-# Plots fig8 with the paper's gnuplot scripts. They emit EPS (as in the paper),
-# which is converted to PDF with ps2pdf.
-plot_fig8() {
-    local fig8_dir="$MAZU_ROOT_DIR/plots/fig8"
-    local data_dir="$fig8_dir/data-paper"
-    local output_dir="$fig8_dir/outputs/paper"
+# Plots a figure with the paper's gnuplot scripts under plots/<fig>/scripts.
+# They emit EPS (as in the paper), which is converted to PDF with ps2pdf.
+#   $1 = figure name (e.g. fig8), $2 = glob of the scripts to run
+plot_paper_fig() {
+    local fig=$1
+    local script_glob=$2
+    local fig_dir="$MAZU_ROOT_DIR/plots/$fig"
+    local data_dir="$fig_dir/data-paper"
+    local output_dir="$fig_dir/outputs/paper"
 
     for cmd in gnuplot ps2pdf; do
         if ! command -v $cmd &> /dev/null; then
@@ -104,17 +113,17 @@ plot_fig8() {
 
     mkdir -p "$output_dir"
 
-    for gpi in "$fig8_dir"/scripts/plot_cold_path_*.gpi; do
+    for gpi in "$fig_dir"/scripts/$script_glob; do
         mazu_echo "Plotting $(basename "$gpi")"
-        gnuplot -e "script_dir='$fig8_dir/scripts'; data_dir='$data_dir'; output_dir='$output_dir'" "$gpi"
+        gnuplot -e "script_dir='$fig_dir/scripts'; data_dir='$data_dir'; output_dir='$output_dir'" "$gpi"
     done
 
-    for eps in "$output_dir"/fig8*.eps; do
+    for eps in "$output_dir"/$fig*.eps; do
         ps2pdf -dEPSCrop "$eps" "${eps%.eps}.pdf"
         rm "$eps"
     done
 
-    mazu_echo "Fig8 plots written to $output_dir"
+    mazu_echo "${fig^} plots written to $output_dir"
 }
 
 mazu_echo "Start of Script"
@@ -125,8 +134,12 @@ if [[ "$setup_flag" == "true" ]]; then
     setup
 fi
 
+if [[ "$fig7_flag" == "true" ]]; then
+    plot_paper_fig fig7 "fixed-resource-*.gpi"
+fi
+
 if [[ "$fig8_flag" == "true" ]]; then
-    plot_fig8
+    plot_paper_fig fig8 "plot_cold_path_*.gpi"
 fi
 
 mazu_echo "End of Script"

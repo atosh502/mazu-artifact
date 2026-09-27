@@ -1,0 +1,171 @@
+# Istio vs Mazu CPU: sidecars and kube-apiserver on one axis, clustered bars.
+#
+# One cluster per component, two bars per (scale, arm): the colour is the
+# app-replica scale (teal = 1x, blue = 4x, rust = 16x) and the fill pattern is
+# the arm (single diagonals = Istio, crosshatch = Mazu). Each bar is one
+# number: cld_pool_resource_usage.py already collapsed the RPS ladder within a
+# run and averaged over the 10 runs, so nothing is summed or divided here --
+# the mean, its stddev and the Mazu/Istio ratio are all read straight out of
+# the file.
+#
+# A gnuplot fill is either solid *or* pattern, never both, so every bar is
+# drawn twice: once as a solid box in the scale's hue, then again as a
+# "transparent pattern" box at the same x, which hatches over the colour
+# without painting a background of its own. Because the two dimensions are
+# carried by two independent channels, the key does not need one entry per
+# combination -- it is decomposed into colour entries and two pattern entries,
+# built from keyentry rather than from the plot titles.
+#
+# The value axis is logarithmic. The sidecar total is ~25-65x the apiserver
+# total, so on a linear axis every apiserver bar collapses into the baseline
+# and the comparison this figure exists to make is unreadable. Bars therefore
+# start at the axis floor rather than at zero, and bar height encodes a ratio
+# rather than a magnitude -- so the Mazu/Istio ratio is printed above every
+# Mazu bar. Error bars are the cross-run sample stddev; at 10 runs they are
+# mostly shorter than the bar border, which is itself the point.
+#
+# cld_resource_pooled_cpu.dat is laid out with one index block per component
+# and one row per scale -- the transpose of what gnuplot's clustered histogram
+# style wants, since that style clusters by row. So the bars are placed as
+# plain boxes at explicit x instead: cluster p sits at x = p - 1 and bar k
+# takes one slot of width 1 / (NS + GAP) inside it, which is the same geometry
+# the histogram style would have produced. merged_meta.gpi is not loaded any
+# more; it hardcoded the three scales the old extract script happened to emit,
+# and the scale selection now lives in SHOW below.
+
+# Paths are relative to the project root; override with
+#   gnuplot -e "data_dir='...'; output_dir='...'" <script>
+if (!exists("script_dir")) script_dir = "plots/fig7/scripts"
+if (!exists("data_dir")) data_dir = "plots/fig7/data-paper"
+if (!exists("output_dir")) output_dir = "plots/fig7/outputs/paper"
+
+load script_dir."/style.gpi"
+
+set terminal postscript eps enhanced color size 3.3in,2.7in font "Helvetica,20" linewidth 2 dashlength 2 pointscale 2
+set output output_dir."/fig7c-cpu-utilization.eps"
+
+DATA    = data_dir."/cld_resource_pooled_cpu.dat"
+# OUTBASE = "plot_15b_cpu_merged"
+
+# Row order inside every index block of the data file, and one hue per scale.
+# Fixed to the file, not to what is plotted, so a scale keeps its colour
+# whichever subset SHOW picks.
+array ALL_SCALE = ["1x", "2x", "4x", "8x", "16x", "32x"]
+# array ALL_SCALE = ["1x", "4x", "16x"]
+array ALL_RGB   = ["#77AADD", "#EE8866", "#EEDD88", "#FFAABB", "#99DDFF", "#44BB99"]
+# The same hues as integers, for the "lc rgb variable" column; keyentry wants
+# the strings, the bars want these.
+array ALL_RGB_INT = [0x77AADD, 0xEE8866, 0xEEDD88, 0xFFAABB, 0x99DDFF, 0x44BB99]
+
+# Which scales to draw, as 0-based row numbers into the block above, and the
+# components to cluster by, as index block numbers. Block 2 is the
+# sidecars + kube-apiserver total, left out so the parts stay additive.
+# array SHOW = [0, 2, 4]                                  # 1x, 4x, 16x
+array SHOW = [4, 2, 0]                                  # 16x, 4x, 1x
+array PART = [0, 1]
+array PART_LABEL = ["Sidecars, all pods", "kube-apiserver"]
+
+N_SHOW = |SHOW|
+N_PART = |PART|
+
+array ARM = ["Istio", "Mazu"]
+NS  = 2 * N_SHOW            # bars per cluster
+GAP = 2                     # blank slots between clusters, in bar widths
+
+# Column layout of cld_resource_pooled_cpu.dat, per row:
+#   2/3 = Istio mean, stddev   4/5 = Mazu mean, stddev   6 = Mazu/Istio   7 = runs
+COL_MEAN  = 2
+COL_RATIO = 6
+
+# pdfcairo/pngcairo pattern numbering: 5 is a sparse single diagonal, 2 the
+# crosshatch. Not two mirrored diagonals -- at this bar width those read the
+# same once the figure is scaled down in a paper.
+array ARM_PATTERN = [5, 2]                 # Istio, Mazu
+
+# Hatch and border ink. One dark grey for both, so the pattern reads as texture
+# on the hue rather than as a second colour competing with it.
+INK = "#404040"
+
+set logscale y
+set yrange [1:500]
+
+# Geometry. Each cluster sits on an integer x and every bar takes one slot of
+# width 1 / (NS + GAP) inside it -- the same geometry gnuplot's clustered
+# histogram style would have produced.
+boff(k) = (k - (NS + 1) / 2.) / (NS + GAP)
+BW      = 0.9 / (NS + GAP)
+
+# Inside an index block, $0 is the 0-based row number, i.e. the scale. Map it
+# to the bar slot it was given in SHOW -- 0 when the scale is not being drawn,
+# which sends the bar's x to NaN and drops it. This is what lets one plot
+# element cover a whole block instead of one element per (block, row).
+slotof(r)   = sum [s = 1:N_SHOW] (int(r) == SHOW[s] ? s : 0)
+barof(r, a) = 2 * (slotof(r) - 1) + a
+xoff(r, a)  = slotof(r) == 0 ? NaN : boff(barof(r, a))
+
+# Per-bar hue has to travel as data for the same reason, via "lc rgb variable".
+rgbof(r) = ALL_RGB_INT[int(r) + 1]
+
+# Column of the mean / its stddev for arm a.
+mean(a) = COL_MEAN + 2 * (a - 1)
+sd(a)   = mean(a) + 1
+
+set style fill solid 1.0 border linecolor rgb INK
+set boxwidth BW
+set border
+set tics nomirror
+set grid ytics
+set bars 0.4
+set xrange [-0.5 : N_PART - 0.5]
+set xtics ()
+do for [p = 1:N_PART] {
+    eval sprintf('set xtics add ("%s" %d)', PART_LABEL[p], p - 1)
+}
+set xtics scale 0
+set ylabel "CPU (cores)"
+# set title "Total CPU usage: Istio vs Mazu" offset 0,0.2
+# maxrows 1 rather than maxcols: with the scale entries widened by the
+# "replicas" suffix, gnuplot's own column fitting wraps the key onto a
+# second row, which then rides up into the xtic labels.
+set key top outside center horizontal maxcols 5 maxrows 1 \
+    width 1 samplen 2
+
+do for [t = 1:1] {
+    # if (t == 1) {
+    #     set terminal pdfcairo enhanced color font "Helvetica,15" size 10in,4.5in
+    #     set output OUTBASE . ".pdf"
+    # } else {
+    #     set terminal pngcairo enhanced color font "Helvetica,15" size 1200,540
+    #     set output OUTBASE . ".png"
+    # }
+
+    # Four passes over the same blocks: the solid bars, the pattern overlay
+    # that hatches them, the cross-run stddev, then the Mazu/Istio ratio above
+    # each Mazu bar. The key is built from keyentry at the end.
+    plot for [p = 1:N_PART] for [a = 1:2] DATA index PART[p] \
+             using ((p - 1) + xoff($0, a)):(column(mean(a))):(rgbof($0)) \
+             with boxes notitle linecolor rgb variable \
+             fillstyle solid 1.0 border linecolor rgb INK, \
+         for [p = 1:N_PART] for [a = 1:2] DATA index PART[p] \
+             using ((p - 1) + xoff($0, a)):(column(mean(a))) \
+             with boxes notitle linecolor rgb INK \
+             fillstyle transparent pattern ARM_PATTERN[a] \
+             border linecolor rgb INK, \
+         for [p = 1:N_PART] for [a = 1:2] DATA index PART[p] \
+             using ((p - 1) + xoff($0, a)):(column(mean(a))):(column(sd(a))) \
+             with yerrorbars notitle linecolor rgb INK pointtype 0 linewidth 1, \
+         for [p = 1:N_PART] DATA index PART[p] \
+             using ((p - 1) + xoff($0, 2)):(column(mean(2))): \
+             (sprintf("%.2fx", column(COL_RATIO))) \
+             with labels rotate by 45 font ",16" left offset -0.2,0.25 \
+             textcolor rgb INK notitle, \
+         for [s = 1:N_SHOW] keyentry with boxes \
+             linecolor rgb ALL_RGB[SHOW[s] + 1] \
+             fillstyle solid 1.0 border linecolor rgb INK \
+             title ALL_SCALE[SHOW[s] + 1], \
+         for [a = 1:2] keyentry with boxes linecolor rgb INK \
+             fillstyle transparent pattern ARM_PATTERN[a] \
+             border linecolor rgb INK title ARM[a]
+
+    unset output
+}

@@ -1,0 +1,71 @@
+# Plot one latency percentile vs target RPS, one curve per replica scale,
+# from a file written by extract_replica_scale.py.
+#
+#   gnuplot -e 'STRAT="mazu"'              plot_replica_scale_pct.gpi   # p99
+#   gnuplot -e 'STRAT="istio"; PCT="p50"'  plot_replica_scale_pct.gpi
+#   gnuplot -e 'DATA="istio.dat"; PCT="p90"; OUT="istio_p90.pdf"' plot_replica_scale_pct.gpi
+#
+# Variables (all optional except that DATA or STRAT must identify the file):
+#   PCT    p50 | p90 | p99        (default p99)
+#   STRAT  istio | mazu           names the file replica_scale_<STRAT>.dat
+#   DATA   explicit input file    (overrides STRAT)
+#   OUT    output pdf
+#   SCALES number of scale columns in the file (default 6: 1x..32x)
+#   NAMES  space-separated scale labels for the key (default "1x 2x 4x 8x 16x 32x")
+#   HIDEFLAGGED  1 = drop points whose step missed >=1% of the offered load
+
+# Paths are relative to the project root; override with
+#   gnuplot -e "data_dir='...'; output_dir='...'" <script>
+if (!exists("script_dir")) script_dir = "plots/fig7/scripts"
+if (!exists("data_dir")) data_dir = "plots/fig7/data-paper"
+if (!exists("output_dir")) output_dir = "plots/fig7/outputs/paper"
+
+load script_dir."/style.gpi"
+
+set terminal postscript eps enhanced color size 3.3in,2.7in font "Helvetica,20" linewidth 2 dashlength 2 pointscale 2
+set output output_dir."/fig7b-mazu-p99-latency-by-scale.eps"
+
+if (!exists("PCT"))    PCT    = "p99"
+if (!exists("STRAT"))  STRAT  = "mazu"
+if (!exists("DATA"))   DATA   = data_dir."/pooled_latency_by_scale.dat"
+if (!exists("OUT"))    OUT    = "plot_replica_scale_".STRAT."_".PCT.".pdf"
+if (!exists("NAMES"))  NAMES  = "1x 2x 4x 8x 16x 32x"
+if (!exists("SCALES")) SCALES = words(NAMES)
+if (!exists("HIDEFLAGGED")) HIDEFLAGGED = 0
+
+# p50 -> 0, p90 -> 1, p99 -> 2; column for scale i (1-based) is 2 + 4*(i-1) + off
+OFF = PCT eq "p50" ? 0 : (PCT eq "p90" ? 1 : (PCT eq "p99" ? 2 : NaN))
+if (OFF != OFF) {
+    print "PCT must be p50, p90 or p99 (got \"".PCT."\")"
+    exit
+}
+# col(i)  = 2 + 4*(i-1) + OFF
+col(i) = (13+(i-1))*2+1
+flag(i) = 5 + 4*(i-1)
+
+TITLE = STRAT eq "istio" ? "Istio" : (STRAT eq "mazu" ? "Mazu" : STRAT)
+
+set datafile missing "NaN"
+
+# set title TITLE." -- ".PCT." latency vs offered load"
+set xlabel "Queries per second (QPS)"
+set ylabel PCT." latency (ms)"
+
+set key top outside center horizontal maxrows 2 width 1 spacing 1
+
+set logscale x
+set logscale y
+
+set xrange [90:2300]
+set xtics (100, 200, 400, 800, 1200, 2000)
+set format y "%.0s%c"   # 10000 -> 10k
+set grid ytics
+set tics nomirror
+
+# With HIDEFLAGGED, a step that dropped >=1% of the offered load is plotted as
+# missing rather than as a latency that only describes the load that completed.
+y(i) = HIDEFLAGGED ? (column(flag(i)) > 0 ? NaN : column(col(i))) : column(col(i))
+
+plot for [i=1:SCALES] DATA using 1:(y(i)) \
+        title word(NAMES, i) with linespoints \
+        linestyle i linewidth 2 pointtype 7 pointsize 0.4
