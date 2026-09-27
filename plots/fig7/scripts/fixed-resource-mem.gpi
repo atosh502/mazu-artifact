@@ -45,6 +45,12 @@ if (!exists("script_dir")) script_dir = "plots/fig7/scripts"
 if (!exists("data_dir")) data_dir = "plots/fig7/data-paper"
 if (!exists("output_dir")) output_dir = "plots/fig7/outputs/paper"
 
+# Scales to draw, space-separated, and yauto=1 to autoscale the value axis
+# instead of the paper's fixed range; override with
+#   gnuplot -e "scales='1x 2x'; yauto=1" <script>
+if (!exists("scales")) scales = "1x 4x 16x"
+if (!exists("yauto")) yauto = 0
+
 load script_dir."/style.gpi"
 
 set terminal postscript eps enhanced color size 3.3in,2.7in font "Helvetica,20" linewidth 2 dashlength 2 pointscale 2
@@ -68,7 +74,12 @@ array ALL_RGB_INT = [0x77AADD, 0xEE8866, 0xEEDD88, 0xFFAABB, 0x99DDFF, 0x44BB99]
 # components to cluster by, as index block numbers. Block 2 is the
 # sidecars + kube-apiserver total, left out so the parts stay additive.
 # array SHOW = [0, 2, 4]                                  # 1x, 4x, 16x
-array SHOW = [4, 2, 0]                                  # 16x, 4x, 1x
+# Built from scales, largest scale first: "1x 4x 16x" gives [4, 2, 0].
+scale_row(s) = sum [k = 1:|ALL_SCALE|] (ALL_SCALE[k] eq s ? k - 1 : 0)
+array SHOW[words(scales)]
+do for [s = 1:|SHOW|] {
+    SHOW[s] = scale_row(word(scales, |SHOW| + 1 - s))
+}
 array PART = [0, 1]
 array PART_LABEL = ["Sidecars, all pods", "kube-apiserver"]
 
@@ -93,7 +104,13 @@ array ARM_PATTERN = [5, 2]                 # Istio, Mazu
 # on the hue rather than as a second colour competing with it.
 INK = "#404040"
 
-set yrange [0:YMAX]
+if (yauto) {
+    # headroom above the tallest bar for its ratio label
+    set yrange [0:*]
+    set offsets 0, 0, graph 0.3, 0
+} else {
+    set yrange [0:YMAX]
+}
 
 # Geometry. Each cluster sits on an integer x and every bar takes one slot of
 # width 1 / (NS + GAP) inside it -- the same geometry gnuplot's clustered

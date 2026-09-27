@@ -17,7 +17,7 @@ usage() {
     echo "Options:"
     echo "  --setup      Clone DeathStarBench under ./workspace and bootstrap socialNetwork"
     echo "  --fig6       Figure 6 (requires --plot-only for now)"
-    echo "  --fig7       Figure 7 (requires --plot-only for now)"
+    echo "  --fig7       Figure 7 (requires --plot-only or --run)"
     echo "  --fig8       Figure 8 (requires --plot-only or --run)"
     echo "  --plot-only  Only plot the selected figure(s) from the paper's data"
     echo "  --run        Run a short, single-run benchmark for the selected figure(s)"
@@ -66,7 +66,7 @@ fi
 for fig in fig6 fig7 fig8; do
     fig_flag="${fig}_flag"
     [[ "${!fig_flag}" == "true" ]] || continue
-    if [[ "$run_flag" == "true" && "$fig" != "fig8" ]]; then
+    if [[ "$run_flag" == "true" && "$fig" == "fig6" ]]; then
         mazu_echo "Running the $fig experiment is not supported yet; use --$fig --plot-only"
         exit 1
     fi
@@ -116,10 +116,12 @@ setup() {
 #   $1 = figure name (e.g. fig8), $2 = glob of the scripts to run,
 #   $3 = data variant: paper (default) reads data-paper/ and writes
 #        outputs/paper/, run reads data-run/ and writes outputs/run/
+#   $4 = extra gnuplot assignments passed to every script (optional)
 plot_fig() {
     local fig=$1
     local script_glob=$2
     local variant=${3:-paper}
+    local extra_vars=${4:-}
     local fig_dir="$MAZU_ROOT_DIR/plots/$fig"
     local data_dir="$fig_dir/data-$variant"
     local output_dir="$fig_dir/outputs/$variant"
@@ -135,7 +137,7 @@ plot_fig() {
 
     for gpi in "$fig_dir"/scripts/$script_glob; do
         mazu_echo "Plotting $(basename "$gpi")"
-        gnuplot -e "script_dir='$fig_dir/scripts'; data_dir='$data_dir'; output_dir='$output_dir'" "$gpi"
+        gnuplot -e "script_dir='$fig_dir/scripts'; data_dir='$data_dir'; output_dir='$output_dir'; $extra_vars" "$gpi"
     done
 
     for eps in "$output_dir"/$fig*.eps; do
@@ -144,6 +146,155 @@ plot_fig() {
     done
 
     mazu_echo "${fig^} plots written to $output_dir"
+}
+
+# The run scripts reach the TPM nodes by name (node-0 node-1), which not every
+# experiment resolves; default TPM_NODES to the control-plane InternalIPs
+resolve_tpm_nodes() {
+    if [[ -z "${TPM_NODES:-}" ]]; then
+        TPM_NODES=$(kubectl get nodes -l node-role.kubernetes.io/control-plane \
+            -o jsonpath='{range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{" "}{end}')
+        export TPM_NODES="${TPM_NODES% }"
+    fi
+    mazu_echo "TPM nodes: $TPM_NODES"
+}
+
+# Removes what a run leaves in the cluster: the run scripts only tear down
+# before each arm, so the last arm's workload and mesh stay up. Mirrors their
+# teardown: the workload, Prometheus (already gone unless the run failed) and
+# the Istio/Mazu mesh. Best effort: the results are on disk by now, so a
+# failed step is reported rather than fatal.
+#   $1 = workload manifests under socialNetwork/scratch/yaml, space-separated
+#   $2 = app labels of the workload pods to wait on, space-separated
+teardown_run() {
+    local manifests=$1
+    local apps=$2
+    local args=()
+    for manifest in $manifests; do
+        args+=(-f "$MAZU_SN_DIR/scratch/yaml/$manifest")
+    done
+
+    mazu_echo "Tearing down the workload"
+    kubectl delete --ignore-not-found "${args[@]}" || mazu_echo "Could not delete the workload; check kubectl get pods"
+    for app in $apps; do
+        kubectl wait --for=delete pod -l app="$app" --timeout=300s 2>/dev/null || true
+    done
+
+    mazu_echo "Tearing down Prometheus and the mesh"
+    "$MAZU_SN_DIR/setup_social_network.sh" uninstall-prometheus || mazu_echo "Could not uninstall Prometheus"
+    "$MAZU_SN_DIR/setup_social_network.sh" remove-istio || mazu_echo "Could not remove the mesh; check kubectl get pods -n istio-system"
+    kubectl wait --for=delete pod -l app=istiod -n istio-system --timeout=300s 2>/dev/null || true
+    kubectl wait --for=delete pod -l app=istio-ingressgateway -n istio-system --timeout=300s 2>/dev/null || true
+}
+
+# Figure 7: a single short run of DeathStarBench's
+# run-benchmark1.5b-replica-scale-sweep.sh (Istio vs Mazu st5-AttUpd, wrk2 RPS
+# sweep against a Bookinfo fleet at each replica scale). The paper pools 10
+# runs of scales 1x-32x at RPS 100-2000, 120s per step (see
+# results/benchmark1.5b-replica-scale-10runs-*); this is only a correctness run
+# at the scales and RPS below. The run is pooled with the paper's
+# cld_pool_*.py scripts (stddev 0), and plotted with the paper's gnuplot
+# scripts restricted to the scales that ran.
+#   outputs/run/raw/  everything the sweep writes, plus the pooling scripts
+#   data-run/         pooled_latency_by_scale.dat and cld_resource_pooled_*.dat,
+#                     as in data-paper/
+#   outputs/run/      fig7*.pdf, named as in outputs/paper/
+#   MAZU_RUN_DURATION overrides the duration of each RPS step in seconds (default: 60)
+FIG7_SCALES=(1 2)
+FIG7_RPS_VALUES=(100 200 400)
+# Directory names the sweep gives the Istio and Mazu arms
+FIG7_STRATEGIES=(istio st5-AttUpd)
+
+run_fig7() {
+    local fig_dir="$MAZU_ROOT_DIR/plots/fig7"
+    local data_dir="$fig_dir/data-run"
+    local output_dir="$fig_dir/outputs/run"
+    local raw_dir="$output_dir/raw"
+    # The pooling scripts pool every benchmark*/ directory under raw/
+    local run_dir="$raw_dir/benchmark1.5b-replica-scale-run01"
+    local duration=${MAZU_RUN_DURATION:-60}
+    local sweep="$MAZU_SN_DIR/run-benchmark1.5b-replica-scale-sweep.sh"
+
+    if [[ ! -x "$sweep" ]]; then
+        mazu_echo "$sweep not found; run with --setup first"
+        exit 1
+    fi
+
+    # Both directories only ever hold the output of the previous run
+    mazu_echo "Clearing $data_dir and $output_dir"
+    rm -rf "$data_dir" "$output_dir"
+    mkdir -p "$data_dir" "$raw_dir"
+
+    resolve_tpm_nodes
+
+    mazu_echo "Running the replica-scale sweep at scales ${FIG7_SCALES[*]} and RPS ${FIG7_RPS_VALUES[*]}, ${duration}s per step, results in $run_dir"
+    # Run from socialNetwork: install-mazu writes istio-install-config.yaml to
+    # the cwd. The sweep keeps going when a scale fails and exits non-zero at
+    # the end; pool_fig7_run reports which results are missing.
+    if ! (cd "$MAZU_SN_DIR" && SCALES="${FIG7_SCALES[*]}" RPS_VALUES="${FIG7_RPS_VALUES[*]}" \
+            DURATION=$duration SKIP_PLOT=1 RESULTS_DIR="$run_dir" "$sweep"); then
+        mazu_echo "The replica-scale sweep reported a failure; see $run_dir/logs"
+    fi
+
+    # Both Bookinfo manifests name the same resources as the scaled copies the
+    # sweep applied, so either one deletes the fleet at any scale
+    teardown_run "bookinfo-const.yaml bookinfo-const-tpm.yaml bf-gateway.yaml bf-hpa.yaml bf-no-connection-reuse.yaml" \
+        "details productpage ratings reviews"
+
+    pool_fig7_run "$raw_dir" "$data_dir"
+
+    local scales="${FIG7_SCALES[*]/%/x}"
+    plot_fig fig7 "fixed-resource-*.gpi" run \
+        "scales='$scales'; rps_values='${FIG7_RPS_VALUES[*]}'; yauto=1"
+}
+
+# Writes the data-paper/ files into data-run/ from the runs under outputs/run/raw
+#   $1 = raw dir holding the benchmark*/ run directories, $2 = data dir
+pool_fig7_run() {
+    local raw_dir=$1
+    local data_dir=$2
+    local pool_dir="$MAZU_SN_DIR/results/benchmark1.5b-replica-scale-10runs-09-19-26_101910"
+
+    local missing=false
+    for scale in "${FIG7_SCALES[@]}"; do
+        for strategy in "${FIG7_STRATEGIES[@]}"; do
+            for rps in "${FIG7_RPS_VALUES[@]}"; do
+                for file in "$rps.txt" "metrics_$rps.json"; do
+                    if ! compgen -G "$raw_dir/benchmark*/scale-${scale}x/$strategy/$file" > /dev/null; then
+                        mazu_echo "Missing scale-${scale}x/$strategy/$file under $raw_dir"
+                        missing=true
+                    fi
+                done
+            done
+        done
+    done
+    if [[ "$missing" == "true" ]]; then
+        mazu_echo "Figure 7 run is incomplete; see the logs/ directory under $raw_dir"
+        exit 1
+    fi
+
+    # The pooling scripts hardcode the paper's RPS ladder and pool the run
+    # directories next to them, so a copy with the run's ladder is placed in
+    # raw/. They keep the paper's six scales, which fixes the data layout the
+    # gnuplot scripts read; the scales that did not run come out as NaN.
+    local rps_list
+    rps_list=$(IFS=,; echo "${FIG7_RPS_VALUES[*]}")
+    for script in cld_pool_replica_scale.py cld_pool_resource_usage.py; do
+        sed "s/^RPS_VALUES = \[.*\]$/RPS_VALUES = [$rps_list]/" "$pool_dir/$script" > "$raw_dir/$script"
+        if ! grep -qx "RPS_VALUES = \[$rps_list\]" "$raw_dir/$script"; then
+            mazu_echo "Could not set RPS_VALUES in $raw_dir/$script"
+            exit 1
+        fi
+    done
+
+    mazu_echo "Pooling one run at scales ${FIG7_SCALES[*]/%/x}; warnings about the missing runs and scales are expected"
+    python3 "$raw_dir/cld_pool_replica_scale.py"
+    python3 "$raw_dir/cld_pool_resource_usage.py"
+
+    cp "$raw_dir/pooled_replica_scale.dat" "$data_dir/pooled_latency_by_scale.dat"
+    cp "$raw_dir"/cld_resource_pooled_{cpu,memory}.dat "$data_dir/"
+
+    mazu_echo "Figure 7 data written to $data_dir"
 }
 
 # Figure 8: a single short run of DeathStarBench's run-benchmark2.sh (Istio vs
@@ -176,18 +327,18 @@ run_fig8() {
     rm -rf "$data_dir" "$output_dir"
     mkdir -p "$data_dir" "$run_dir"
 
-    # run-benchmark2.sh reaches the TPM nodes by name (node-0 node-1), which
-    # not every experiment resolves; default to the control-plane InternalIPs
-    if [[ -z "${TPM_NODES:-}" ]]; then
-        TPM_NODES=$(kubectl get nodes -l node-role.kubernetes.io/control-plane \
-            -o jsonpath='{range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{" "}{end}')
-        export TPM_NODES="${TPM_NODES% }"
-    fi
-    mazu_echo "TPM nodes: $TPM_NODES"
+    resolve_tpm_nodes
 
     mazu_echo "Running benchmark2 for ${duration}s, results in $run_dir"
-    # Run from socialNetwork: install-mazu writes istio-install-config.yaml to the cwd
-    (cd "$MAZU_SN_DIR" && DURATION=$duration RESULTS_DIR="$run_dir" ./run-benchmark2.sh)
+    # Run from socialNetwork: install-mazu writes istio-install-config.yaml to
+    # the cwd. A failed run still gets torn down; average_fig8_run reports
+    # which results are missing.
+    if ! (cd "$MAZU_SN_DIR" && DURATION=$duration RESULTS_DIR="$run_dir" ./run-benchmark2.sh); then
+        mazu_echo "benchmark2 reported a failure; see the run.log files under $run_dir"
+    fi
+
+    teardown_run "fortio.yaml fortio-tpm.yaml fortio-no-connection-reuse.yaml" \
+        "fortio-server fortio-client"
 
     average_fig8_run "$raw_dir" "$data_dir"
     plot_fig fig8 "plot_cold_path_*.gpi" run
@@ -232,7 +383,11 @@ if [[ "$fig6_flag" == "true" ]]; then
 fi
 
 if [[ "$fig7_flag" == "true" ]]; then
-    plot_fig fig7 "fixed-resource-*.gpi"
+    if [[ "$run_flag" == "true" ]]; then
+        run_fig7
+    else
+        plot_fig fig7 "fixed-resource-*.gpi"
+    fi
 fi
 
 if [[ "$fig8_flag" == "true" ]]; then

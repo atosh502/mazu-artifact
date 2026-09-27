@@ -12,7 +12,7 @@
     - In order to build and host images in Docker: `DOCKER_USER=<user-id> ./scripts/setup-system.sh configure build-envoy build-istio`
         - Duration: ~30mins, Size: ~50GB.
 
-2. Step 1: Setup and run benchmarks
+2. Step 2: Setup and run benchmarks
     - Run `./scripts/benchmark.sh` to clone required source files and benchmark scripts under: `./workspace`
     - For plotting the figures from paper without running the experiment:
         - Use: `./scripts/benchmark.sh --plot-only --figX` where figX can be `fig6, fig7 or fig8`.
