@@ -19,7 +19,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 if [[ -z "${MAZU_LOG_FILE:-}" ]]; then
     mazu_log_dir="$(dirname "$SCRIPT_DIR")/logs"
     mkdir -p "$mazu_log_dir"
-    mazu_log_name="build-system-$(date +%Y%m%d-%H%M%S)"
+    mazu_log_name="setup-system-$(date +%Y%m%d-%H%M%S)"
     if [[ $# -gt 0 ]]; then
         mazu_log_name+="-$(IFS=_; echo "$*")"
     fi
