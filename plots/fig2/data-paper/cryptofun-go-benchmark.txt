@@ -1,0 +1,80 @@
+go fmt ./...
+go test -v -bench=. -benchmem
+goos: linux
+goarch: amd64
+pkg: github.com/etclab/cryptofun
+cpu: Intel(R) Xeon(R) CPU E5-2630 v3 @ 2.40GHz
+BenchmarkGenerateECDSAKeyPair
+BenchmarkGenerateECDSAKeyPair/GenerateECDSAKeyPair/P-256
+BenchmarkGenerateECDSAKeyPair/GenerateECDSAKeyPair/P-256-32                35707             32793 ns/op             984 B/op         16 allocs/op
+BenchmarkGenerateECDSAKeyPair/GenerateECDSAKeyPair/P-384
+BenchmarkGenerateECDSAKeyPair/GenerateECDSAKeyPair/P-384-32                 3501            321685 ns/op            1257 B/op         21 allocs/op
+BenchmarkGenerateECDSAKeyPair/GenerateECDSAKeyPair/P-521
+BenchmarkGenerateECDSAKeyPair/GenerateECDSAKeyPair/P-521-32                 1341            784470 ns/op            1987 B/op         26 allocs/op
+BenchmarkECDSASignASN1
+BenchmarkECDSASignASN1/ECDSASignASN1/P-256
+BenchmarkECDSASignASN1/ECDSASignASN1/P-256-32                              11384            108612 ns/op            6338 B/op         67 allocs/op
+BenchmarkECDSASignASN1/ECDSASignASN1/P-384
+BenchmarkECDSASignASN1/ECDSASignASN1/P-384-32                               2173            550360 ns/op            6576 B/op         71 allocs/op
+BenchmarkECDSASignASN1/ECDSASignASN1/P-521
+BenchmarkECDSASignASN1/ECDSASignASN1/P-521-32                                757           1370152 ns/op            7411 B/op         73 allocs/op
+BenchmarkECDSAVerifyASN1
+BenchmarkECDSAVerifyASN1/ECDSAVerifyASN1/P-256
+BenchmarkECDSAVerifyASN1/ECDSAVerifyASN1/P-256-32                           8644            139224 ns/op             576 B/op         10 allocs/op
+BenchmarkECDSAVerifyASN1/ECDSAVerifyASN1/P-384
+BenchmarkECDSAVerifyASN1/ECDSAVerifyASN1/P-384-32                            847           1371836 ns/op             808 B/op         17 allocs/op
+BenchmarkECDSAVerifyASN1/ECDSAVerifyASN1/P-521
+BenchmarkECDSAVerifyASN1/ECDSAVerifyASN1/P-521-32                            376           3145248 ns/op            1224 B/op         17 allocs/op
+BenchmarkGenerateEd25519KeyPair
+BenchmarkGenerateEd25519KeyPair-32                                         29280             37167 ns/op             128 B/op          3 allocs/op
+BenchmarkEd25519phSign
+BenchmarkEd25519phSign-32                                                  24579             45496 ns/op             160 B/op          3 allocs/op
+BenchmarkEd2519phVerify
+BenchmarkEd2519phVerify-32                                                 10804             97157 ns/op              48 B/op          1 allocs/op
+BenchmarkGenerateRSAKeyPair
+BenchmarkGenerateRSAKeyPair/GenerateRSAKeyPair-1024
+BenchmarkGenerateRSAKeyPair/GenerateRSAKeyPair-1024-32                        32          72435681 ns/op          497739 B/op       4388 allocs/op
+BenchmarkGenerateRSAKeyPair/GenerateRSAKeyPair-2048
+BenchmarkGenerateRSAKeyPair/GenerateRSAKeyPair-2048-32                         4         339679262 ns/op          860532 B/op       7139 allocs/op
+BenchmarkGenerateRSAKeyPair/GenerateRSAKeyPair-3072
+BenchmarkGenerateRSAKeyPair/GenerateRSAKeyPair-3072-32                         1        1579852907 ns/op         2741240 B/op      18120 allocs/op
+BenchmarkGenerateRSAKeyPair/GenerateRSAKeyPair-4096
+BenchmarkGenerateRSAKeyPair/GenerateRSAKeyPair-4096-32                         1        1172991288 ns/op         1844808 B/op       7620 allocs/op
+BenchmarkRSASignSHA256
+BenchmarkRSASignSHA256/RSASignSHA256-1024
+BenchmarkRSASignSHA256/RSASignSHA256-1024-32                                1711            596379 ns/op             528 B/op          7 allocs/op
+BenchmarkRSASignSHA256/RSASignSHA256-2048
+BenchmarkRSASignSHA256/RSASignSHA256-2048-32                                 488           2118764 ns/op             912 B/op          7 allocs/op
+BenchmarkRSASignSHA256/RSASignSHA256-3072
+BenchmarkRSASignSHA256/RSASignSHA256-3072-32                                 153           7750149 ns/op           28944 B/op         58 allocs/op
+BenchmarkRSASignSHA256/RSASignSHA256-4096
+BenchmarkRSASignSHA256/RSASignSHA256-4096-32                                  74          14264073 ns/op           38544 B/op         58 allocs/op
+BenchmarkRSAVerifySHA256
+BenchmarkRSAVerifySHA256/RSAVerifySHA256-1024
+BenchmarkRSAVerifySHA256/RSAVerifySHA256-1024-32                           31057             37943 ns/op            1072 B/op         13 allocs/op
+BenchmarkRSAVerifySHA256/RSAVerifySHA256-2048
+BenchmarkRSAVerifySHA256/RSAVerifySHA256-2048-32                           12847             91848 ns/op            1328 B/op         13 allocs/op
+BenchmarkRSAVerifySHA256/RSAVerifySHA256-3072
+BenchmarkRSAVerifySHA256/RSAVerifySHA256-3072-32                            1556            751061 ns/op           43825 B/op         97 allocs/op
+BenchmarkRSAVerifySHA256/RSAVerifySHA256-4096
+BenchmarkRSAVerifySHA256/RSAVerifySHA256-4096-32                             939           1243316 ns/op           62257 B/op        105 allocs/op
+BenchmarkRSAEncrypt
+BenchmarkRSAEncrypt/RSAEncrypt-1024
+BenchmarkRSAEncrypt/RSAEncrypt-1024-32                                     26683             39899 ns/op            1224 B/op         15 allocs/op
+BenchmarkRSAEncrypt/RSAEncrypt-2048
+BenchmarkRSAEncrypt/RSAEncrypt-2048-32                                     11744             98254 ns/op            1608 B/op         15 allocs/op
+BenchmarkRSAEncrypt/RSAEncrypt-3072
+BenchmarkRSAEncrypt/RSAEncrypt-3072-32                                      1520            749203 ns/op           44233 B/op         99 allocs/op
+BenchmarkRSAEncrypt/RSAEncrypt-4096
+BenchmarkRSAEncrypt/RSAEncrypt-4096-32                                       889           1295242 ns/op           62793 B/op        107 allocs/op
+BenchmarkRSADecrypt
+BenchmarkRSADecrypt/RSADecrypt-1024
+BenchmarkRSADecrypt/RSADecrypt-1024-32                                      1915            583088 ns/op             360 B/op          7 allocs/op
+BenchmarkRSADecrypt/RSADecrypt-2048
+BenchmarkRSADecrypt/RSADecrypt-2048-32                                       460           2227698 ns/op             488 B/op          7 allocs/op
+BenchmarkRSADecrypt/RSADecrypt-3072
+BenchmarkRSADecrypt/RSADecrypt-3072-32                                       159           6542595 ns/op            5224 B/op         17 allocs/op
+BenchmarkRSADecrypt/RSADecrypt-4096
+BenchmarkRSADecrypt/RSADecrypt-4096-32                                        74          13774235 ns/op            6888 B/op         17 allocs/op
+PASS
+ok      github.com/etclab/cryptofun     52.204s

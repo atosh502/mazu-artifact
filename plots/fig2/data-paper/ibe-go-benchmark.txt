@@ -1,0 +1,17 @@
+apoudel@node-0:~/ibe$ make benchmark
+go fmt ./...
+go test -v -bench=. -benchmem
+=== RUN   TestDecrypt
+--- PASS: TestDecrypt (0.02s)
+goos: linux
+goarch: amd64
+pkg: github.com/etclab/ibe
+cpu: Intel(R) Xeon(R) CPU E5-2630 v3 @ 2.40GHz
+BenchmarkExtract
+BenchmarkExtract-32         1278            825665 ns/op            1437 B/op         29 allocs/op
+BenchmarkEncrypt
+BenchmarkEncrypt-32          126           8195760 ns/op            6945 B/op         81 allocs/op
+BenchmarkDecrypt
+BenchmarkDecrypt-32          283           3764112 ns/op            4928 B/op         41 allocs/op
+PASS
+ok      github.com/etclab/ibe   3.327s

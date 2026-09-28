@@ -1,0 +1,43 @@
+#!/usr/bin/env gnuplot
+
+# Paths are relative to the project root; override with
+#   gnuplot -e "data_dir='...'; output_dir='...'" <script>
+if (!exists("script_dir")) script_dir = "plots/fig2/scripts"
+if (!exists("data_dir")) data_dir = "plots/fig2/data-paper"
+if (!exists("output_dir")) output_dir = "plots/fig2/outputs/paper"
+
+load script_dir."/style.gpi"
+set output output_dir."/fig2-crypto-scheme-microbenchmarks.eps"
+
+set grid ytics
+set tics nomirror
+
+set style data histogram 
+set style histogram gap 5 clustered 
+set style fill solid 1 border -1
+
+set ylabel "Time (ms)\n(log scale)"
+set xrange[-1:]
+set xtics rotate by 30 offset -0.5, -1.5
+
+set xlabel "Operation" offset 0, -1.5
+set logscale y
+set ytics ( \
+        "0.001"   0.001, \
+        "0.01"   0.01, \
+        "0.1"   0.1, \
+        "1"     1, \
+        "10"   10, \
+        "100"  100, \
+        "1000" 1000, \
+        )
+
+set key font ",12" outside top horizontal maxrows 2 Left reverse
+
+# convert nanoseconds to milliseconds (1,000,000 ns = 1 ms)
+plot data_dir."/all.dat" \
+        using ($2/1e6):xtic(1) title "RBE" linestyle 1, \
+    ""  using ($3/1e6)         title "IBE" linestyle 2, \
+    ""  using ($4/1e6)         title "RSA 3072" linestyle 3, \
+    ""  using ($5/1e6)         title "ECDSA P-256" linestyle 4, \
+    ""  using ($6/1e6)         title "Ed25519" linestyle 5

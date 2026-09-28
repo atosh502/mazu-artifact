@@ -15,8 +15,12 @@
 2. Step 2: Setup and run benchmarks
     - Run `./scripts/benchmark.sh` to clone required source files and benchmark scripts under: `./workspace`
     - For plotting the figures from paper without running the experiment:
-        - Use: `./scripts/benchmark.sh --plot-only --figX` where figX can be `fig6, fig7 or fig8`.
+        - Use: `./scripts/benchmark.sh --plot-only --figX` where figX can be `fig2, fig6, fig7 or fig8`.
         - The output figures will be written to: `./plots/figX/outputs/paper`.
     - For running a small scale version of the experiments and generate the figures:
-        - Use: `./scripts/benchmark.sh --run --figX` where figX can be `fig6, fig7 or fig8`.
+        - Use: `./scripts/benchmark.sh --run --figX` where figX can be `fig2, fig6, fig7 or fig8`.
         - The output figures will be written to: `./plots/figX/outputs/run`
+
+
+# TODO: what does the full run config looks like?
+# TODO: what does the cluster setup looks like? is there a way to get the cluster profile?

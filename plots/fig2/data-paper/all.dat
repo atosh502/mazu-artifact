@@ -1,0 +1,12 @@
+# - measurements are in ns
+# - rsa/3072, ecdsa/p-256 and ed25519 all have a security strength of about 128 bits
+# - RBE.GenKey depends on the size of the ID space
+# - RBE.ProveMembership is essentially just an hash lookup
+#
+#                       rbe         ibe         rsa/3072    ecdsa/p-256     ed25519
+"KeyGen\n(Extract)"     0           825665      1579852907  32793           37167 
+"Sign\n(Decrypt)"       15111243    3764112     7750149     108612          45496 
+"Verify\n(Encrypt)"     14573757    8195760     751061      139224          97157 
+#"Prove\nMembership"     3.760	     0          0           0               0    
+"Verify\nMembership"    10247893     0          0           0               0
+

@@ -15,7 +15,9 @@ usage() {
     echo "Usage: $0 [options]"
     echo ""
     echo "Options:"
-    echo "  --setup      Clone DeathStarBench and trinc under ./workspace and bootstrap socialNetwork"
+    echo "  --setup      Clone DeathStarBench, trinc, ibe, rbe and cryptofun under ./workspace"
+    echo "               and bootstrap socialNetwork"
+    echo "  --fig2       Figure 2 crypto scheme microbenchmarks (requires --plot-only or --run)"
     echo "  --fig6       Figure 6 (requires --plot-only or --run)"
     echo "  --fig7       Figure 7 (requires --plot-only or --run)"
     echo "  --fig8       Figure 8 (requires --plot-only or --run)"
@@ -31,6 +33,7 @@ MAZU_ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Parse flags before logging so bad input does not leave a log behind
 setup_flag=false
+fig2_flag=false
 fig6_flag=false
 fig7_flag=false
 fig8_flag=false
@@ -41,6 +44,7 @@ run_flag=false
 for arg in "$@"; do
     case $arg in
         --setup) setup_flag=true ;;
+        --fig2) fig2_flag=true ;;
         --fig6) fig6_flag=true ;;
         --fig7) fig7_flag=true ;;
         --fig8) fig8_flag=true ;;
@@ -56,7 +60,7 @@ for arg in "$@"; do
     esac
 done
 
-if [[ "$setup_flag" == "false" && "$fig6_flag" == "false" && "$fig7_flag" == "false" && "$fig8_flag" == "false" && "$sec7_4_flag" == "false" ]]; then
+if [[ "$setup_flag" == "false" && "$fig2_flag" == "false" && "$fig6_flag" == "false" && "$fig7_flag" == "false" && "$fig8_flag" == "false" && "$sec7_4_flag" == "false" ]]; then
     usage
     exit 1
 fi
@@ -66,7 +70,7 @@ if [[ "$plot_only_flag" == "true" && "$run_flag" == "true" ]]; then
     exit 1
 fi
 
-for fig in fig6 fig7 fig8 sec7_4; do
+for fig in fig2 fig6 fig7 fig8 sec7_4; do
     fig_flag="${fig}_flag"
     [[ "${!fig_flag}" == "true" ]] || continue
     if [[ "$plot_only_flag" == "false" && "$run_flag" == "false" ]]; then
@@ -86,6 +90,9 @@ export MAZU_WORKSPACE_DIR="$PWD/workspace"
 export MAZU_DSB_DIR="$MAZU_WORKSPACE_DIR/DeathStarBench"
 export MAZU_SN_DIR="$MAZU_DSB_DIR/socialNetwork"
 export MAZU_TRINC_DIR="$MAZU_WORKSPACE_DIR/trinc"
+export MAZU_IBE_DIR="$MAZU_WORKSPACE_DIR/ibe"
+export MAZU_RBE_DIR="$MAZU_WORKSPACE_DIR/rbe"
+export MAZU_CRYPTOFUN_DIR="$MAZU_WORKSPACE_DIR/cryptofun"
 
 setup() {
     if [[ ! -d $MAZU_WORKSPACE_DIR ]]; then
@@ -116,6 +123,31 @@ setup() {
     else
         mazu_echo "Pulling trinc repo"
         git -C $MAZU_TRINC_DIR pull
+    fi
+
+    # The Figure 2 crypto scheme microbenchmarks
+    if [[ ! -d $MAZU_IBE_DIR ]]; then
+        mazu_echo "Cloning ibe repo"
+        git clone --branch main https://github.com/etclab/ibe.git $MAZU_IBE_DIR
+    else
+        mazu_echo "Pulling ibe repo"
+        git -C $MAZU_IBE_DIR pull
+    fi
+
+    if [[ ! -d $MAZU_RBE_DIR ]]; then
+        mazu_echo "Cloning rbe repo"
+        git clone --branch bench https://github.com/etclab/rbe.git $MAZU_RBE_DIR
+    else
+        mazu_echo "Pulling rbe repo"
+        git -C $MAZU_RBE_DIR pull
+    fi
+
+    if [[ ! -d $MAZU_CRYPTOFUN_DIR ]]; then
+        mazu_echo "Cloning cryptofun repo"
+        git clone --branch main https://github.com/etclab/cryptofun.git $MAZU_CRYPTOFUN_DIR
+    else
+        mazu_echo "Pulling cryptofun repo"
+        git -C $MAZU_CRYPTOFUN_DIR pull
     fi
 }
 
@@ -154,6 +186,79 @@ plot_fig() {
     done
 
     mazu_echo "${fig^} plots written to $output_dir"
+}
+
+# Figure 2: a single run of the go test benchmarks of etclab/rbe, etclab/ibe
+# and etclab/cryptofun, as for the paper's data-paper/*-go-benchmark.txt (their
+# `make benchmark`), restricted to the benchmarks Figure 2 plots. The tests are
+# skipped. RBE sweeps every square number of users up to its -max-users and
+# Figure 2 takes the largest; the paper ran -max-users=1024.
+#   data-run/         {rbe,ibe,cryptofun}-go-benchmark.txt and all.dat, as in
+#                     data-paper/
+#   outputs/run/      fig2-crypto-scheme-microbenchmarks.pdf, as in outputs/paper/
+#   MAZU_RBE_MAX_USERS overrides RBE's -max-users, a perfect square (default: 100)
+FIG2_RBE_MAX_USERS=100
+
+run_fig2() {
+    local fig_dir="$MAZU_ROOT_DIR/plots/fig2"
+    local data_dir="$fig_dir/data-run"
+    local output_dir="$fig_dir/outputs/run"
+    local rbe_max_users=${MAZU_RBE_MAX_USERS:-$FIG2_RBE_MAX_USERS}
+    local sqrt
+    sqrt=$(awk -v n="$rbe_max_users" 'BEGIN { print int(sqrt(n) + 0.5) }')
+
+    if [[ ! "$rbe_max_users" =~ ^[0-9]+$ || $((sqrt * sqrt)) -ne $rbe_max_users || $sqrt -lt 2 ]]; then
+        mazu_echo "MAZU_RBE_MAX_USERS must be a perfect square of at least 4, not $rbe_max_users"
+        exit 1
+    fi
+    for dir in "$MAZU_RBE_DIR" "$MAZU_IBE_DIR" "$MAZU_CRYPTOFUN_DIR"; do
+        if [[ ! -f "$dir/go.mod" ]]; then
+            mazu_echo "$dir not found; run with --setup first"
+            exit 1
+        fi
+    done
+    if ! command -v go &> /dev/null; then
+        mazu_echo "go not found; install it with ./scripts/bootstrap.sh"
+        exit 1
+    fi
+
+    # Both directories only ever hold the output of the previous run
+    mazu_echo "Clearing $data_dir and $output_dir"
+    rm -rf "$data_dir" "$output_dir"
+    mkdir -p "$data_dir"
+
+    # The go test -bench patterns match one level of the benchmark name per
+    # slash: only the largest number of users runs for RBE, though its sweep
+    # still sets up every smaller one
+    run_go_bench "$MAZU_RBE_DIR" "$data_dir/rbe-go-benchmark.txt" \
+        -bench "^Benchmark(Encrypt|Decrypt|VerifyMembership)\$/-$rbe_max_users\$" \
+        -timeout 12h -args -max-users="$rbe_max_users"
+    run_go_bench "$MAZU_IBE_DIR" "$data_dir/ibe-go-benchmark.txt" \
+        -bench '^Benchmark(Extract|Encrypt|Decrypt)$'
+    run_go_bench "$MAZU_CRYPTOFUN_DIR" "$data_dir/cryptofun-go-benchmark.txt" \
+        -bench '^Benchmark(GenerateRSAKeyPair|RSASignSHA256|RSAVerifySHA256|GenerateECDSAKeyPair|ECDSASignASN1|ECDSAVerifyASN1|GenerateEd25519KeyPair|Ed25519phSign|Ed2519phVerify)$'
+
+    "$fig_dir/scripts/make-all-dat.sh" "$data_dir"
+
+    plot_fig fig2 "crypto-scheme-*.gpi" run
+}
+
+# Runs go test benchmarks (no tests) in a repo, showing the progress and
+# keeping the output
+#   $1 = repo dir, $2 = output file, $3... = extra go test arguments
+run_go_bench() {
+    local dir=$1
+    local out=$2
+    shift 2
+    local cmd=(go test -v -run '^$' -benchmem "$@")
+
+    mazu_echo "Running the $(basename "$dir") benchmarks, results in $out"
+    echo "${cmd[*]}" > "$out"
+    (cd "$dir" && "${cmd[@]}") 2>&1 | tee -a "$out"
+    if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
+        mazu_echo "The $(basename "$dir") benchmarks failed; see $out"
+        exit 1
+    fi
 }
 
 # The run scripts reach the TPM nodes by name (node-0 node-1), which not every
@@ -560,6 +665,14 @@ mazu_echo "Logging to $MAZU_LOG_FILE"
 
 if [[ "$setup_flag" == "true" ]]; then
     setup
+fi
+
+if [[ "$fig2_flag" == "true" ]]; then
+    if [[ "$run_flag" == "true" ]]; then
+        run_fig2
+    else
+        plot_fig fig2 "crypto-scheme-*.gpi"
+    fi
 fi
 
 if [[ "$fig6_flag" == "true" ]]; then
