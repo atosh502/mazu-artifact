@@ -14,6 +14,9 @@ set output output_dir."/fig6d-memory-utilization.eps"
 # Add load steps by listing them (they become extra clusters):
 #   gnuplot -e 'RPS_LIST="400 800"' plot_sn_memory_400.gpi
 if (!exists("RPS_LIST")) RPS_LIST = "400 800 1000"
+# yauto=1 autoscales the value axis instead of the paper's fixed range:
+#   gnuplot -e 'RPS_LIST="100 200 400"; yauto=1' <script>
+if (!exists("yauto")) yauto = 0
 RPS_TAG = system(sprintf("echo '%s' | tr ' ' '_'", RPS_LIST))
 
 # pivot_cpu.awk is unit-agnostic -- it just pulls the wanted rows out of
@@ -65,7 +68,13 @@ set ylabel "Memory (MiB)"
 # Log axis keeps all six bars readable; compare the printed values, since
 # bar *heights* on a log axis are not proportional.
 set logscale y
-set yrange [100:30000]
+if (yauto) {
+    # headroom above the tallest bar for its ratio label
+    set yrange [*:*]
+    set offsets 0, 0, graph 0.3, 0
+} else {
+    set yrange [100:30000]
+}
 set format y "%.0f"
 
 # With N bars and gap G per cluster, bar i sits at clustercenter+(i-(N+1)/2)/(N+G).

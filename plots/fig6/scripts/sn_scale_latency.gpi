@@ -4,6 +4,10 @@ if (!exists("script_dir")) script_dir = "plots/fig6/scripts"
 if (!exists("data_dir")) data_dir = "plots/fig6/data-paper"
 if (!exists("output_dir")) output_dir = "plots/fig6/outputs/paper"
 
+# RPS tics to draw, space-separated and ascending, instead of the paper's
+# 200-1200 axis; override with
+#   gnuplot -e "rps_values='100 200 400'" <script>
+
 load script_dir."/style.gpi"
 
 set terminal postscript eps enhanced color size 3.3in,2.7in font "Helvetica,20" linewidth 2 dashlength 2 pointscale 2
@@ -21,9 +25,21 @@ set logscale y
 set grid ytics
 set tics nomirror
 
-set xrange [50:1250]
-# set xtics (100, 200, 400, 600, 800, 1000, 1200)
-set xtics (200, 400, 600, 800, 1000, 1200)
+if (exists("rps_values")) {
+    N_RPS = words(rps_values)
+    RPS_LO = word(rps_values, 1) + 0
+    RPS_HI = word(rps_values, N_RPS) + 0
+    RPS_PAD = (RPS_HI > RPS_LO) ? 0.05 * (RPS_HI - RPS_LO) : 0.1 * RPS_LO
+    set xrange [RPS_LO - RPS_PAD : RPS_HI + RPS_PAD]
+    set xtics ()
+    do for [i = 1:N_RPS] {
+        eval sprintf('set xtics add (%s)', word(rps_values, i))
+    }
+} else {
+    set xrange [50:1250]
+    # set xtics (100, 200, 400, 600, 800, 1000, 1200)
+    set xtics (200, 400, 600, 800, 1000, 1200)
+}
 
 set format y "%.0s%c"
 
