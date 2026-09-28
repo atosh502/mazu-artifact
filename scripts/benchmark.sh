@@ -18,6 +18,7 @@ usage() {
     echo "  --setup      Clone DeathStarBench, trinc, ibe, rbe and cryptofun under ./workspace"
     echo "               and bootstrap socialNetwork"
     echo "  --fig2       Figure 2 crypto scheme microbenchmarks (requires --plot-only or --run)"
+    echo "  --fig3       Figure 3 RBE microbenchmarks (requires --plot-only or --run)"
     echo "  --fig6       Figure 6 (requires --plot-only or --run)"
     echo "  --fig7       Figure 7 (requires --plot-only or --run)"
     echo "  --fig8       Figure 8 (requires --plot-only or --run)"
@@ -34,6 +35,7 @@ MAZU_ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 # Parse flags before logging so bad input does not leave a log behind
 setup_flag=false
 fig2_flag=false
+fig3_flag=false
 fig6_flag=false
 fig7_flag=false
 fig8_flag=false
@@ -45,6 +47,7 @@ for arg in "$@"; do
     case $arg in
         --setup) setup_flag=true ;;
         --fig2) fig2_flag=true ;;
+        --fig3) fig3_flag=true ;;
         --fig6) fig6_flag=true ;;
         --fig7) fig7_flag=true ;;
         --fig8) fig8_flag=true ;;
@@ -60,7 +63,7 @@ for arg in "$@"; do
     esac
 done
 
-if [[ "$setup_flag" == "false" && "$fig2_flag" == "false" && "$fig6_flag" == "false" && "$fig7_flag" == "false" && "$fig8_flag" == "false" && "$sec7_4_flag" == "false" ]]; then
+if [[ "$setup_flag" == "false" && "$fig2_flag" == "false" && "$fig3_flag" == "false" && "$fig6_flag" == "false" && "$fig7_flag" == "false" && "$fig8_flag" == "false" && "$sec7_4_flag" == "false" ]]; then
     usage
     exit 1
 fi
@@ -70,7 +73,7 @@ if [[ "$plot_only_flag" == "true" && "$run_flag" == "true" ]]; then
     exit 1
 fi
 
-for fig in fig2 fig6 fig7 fig8 sec7_4; do
+for fig in fig2 fig3 fig6 fig7 fig8 sec7_4; do
     fig_flag="${fig}_flag"
     [[ "${!fig_flag}" == "true" ]] || continue
     if [[ "$plot_only_flag" == "false" && "$run_flag" == "false" ]]; then
@@ -204,13 +207,8 @@ run_fig2() {
     local data_dir="$fig_dir/data-run"
     local output_dir="$fig_dir/outputs/run"
     local rbe_max_users=${MAZU_RBE_MAX_USERS:-$FIG2_RBE_MAX_USERS}
-    local sqrt
-    sqrt=$(awk -v n="$rbe_max_users" 'BEGIN { print int(sqrt(n) + 0.5) }')
 
-    if [[ ! "$rbe_max_users" =~ ^[0-9]+$ || $((sqrt * sqrt)) -ne $rbe_max_users || $sqrt -lt 2 ]]; then
-        mazu_echo "MAZU_RBE_MAX_USERS must be a perfect square of at least 4, not $rbe_max_users"
-        exit 1
-    fi
+    check_max_users MAZU_RBE_MAX_USERS "$rbe_max_users"
     for dir in "$MAZU_RBE_DIR" "$MAZU_IBE_DIR" "$MAZU_CRYPTOFUN_DIR"; do
         if [[ ! -f "$dir/go.mod" ]]; then
             mazu_echo "$dir not found; run with --setup first"
@@ -241,6 +239,72 @@ run_fig2() {
     "$fig_dir/scripts/make-all-dat.sh" "$data_dir"
 
     plot_fig fig2 "crypto-scheme-*.gpi" run
+}
+
+# Exits unless RBE's -max-users is a perfect square of at least 4, which its
+# benchmarks sweep from 2*2 up to
+#   $1 = name of the variable it came from, $2 = value
+check_max_users() {
+    local name=$1
+    local max_users=$2
+    local sqrt
+    sqrt=$(awk -v n="$max_users" 'BEGIN { print int(sqrt(n) + 0.5) }')
+
+    if [[ ! "$max_users" =~ ^[0-9]+$ || $((sqrt * sqrt)) -ne $max_users || $sqrt -lt 2 ]]; then
+        mazu_echo "$name must be a perfect square of at least 4, not $max_users"
+        exit 1
+    fi
+}
+
+# Figure 3: a single run of the NewKeyPair and RegisterUser go test benchmarks
+# of etclab/rbe, as for the paper's data-paper/{new-keypair,reg-user}.data. The
+# tests are skipped. Both sweep every square number of users up to
+# -max-users; the paper ran -max-users=1000000, the default below takes ~3
+# minutes. The results are combined with etclab/rbe's format.py, as for the
+# paper's data-paper/rbe-genkey-reguser.dat.
+#   data-run/         new-keypair.data, reg-user.data and rbe-genkey-reguser.dat,
+#                     as in data-paper/
+#   outputs/run/      fig3-rbe-microbenchmarks.pdf, as in outputs/paper/
+#   MAZU_FIG3_MAX_USERS overrides RBE's -max-users, a perfect square (default: 2500)
+FIG3_RBE_MAX_USERS=2500
+# Number of points each curve of the run's plot aims for
+FIG3_POINTS=12
+
+run_fig3() {
+    local fig_dir="$MAZU_ROOT_DIR/plots/fig3"
+    local data_dir="$fig_dir/data-run"
+    local output_dir="$fig_dir/outputs/run"
+    local rbe_max_users=${MAZU_FIG3_MAX_USERS:-$FIG3_RBE_MAX_USERS}
+
+    check_max_users MAZU_FIG3_MAX_USERS "$rbe_max_users"
+    if [[ ! -f "$MAZU_RBE_DIR/go.mod" || ! -f "$MAZU_RBE_DIR/format.py" ]]; then
+        mazu_echo "$MAZU_RBE_DIR not found; run with --setup first"
+        exit 1
+    fi
+    if ! command -v go &> /dev/null; then
+        mazu_echo "go not found; install it with ./scripts/bootstrap.sh"
+        exit 1
+    fi
+
+    # Both directories only ever hold the output of the previous run
+    mazu_echo "Clearing $data_dir and $output_dir"
+    rm -rf "$data_dir" "$output_dir"
+    mkdir -p "$data_dir"
+
+    run_go_bench "$MAZU_RBE_DIR" "$data_dir/new-keypair.data" \
+        -bench '^BenchmarkNewKeyPair$' -timeout 12h -args -max-users="$rbe_max_users"
+    run_go_bench "$MAZU_RBE_DIR" "$data_dir/reg-user.data" \
+        -bench '^BenchmarkRegisterUser$' -timeout 12h -args -max-users="$rbe_max_users"
+
+    python3 "$MAZU_RBE_DIR/format.py" "$data_dir/new-keypair.data" \
+        "$data_dir/reg-user.data" "$data_dir/rbe-genkey-reguser.dat"
+
+    # The sweep has sqrt(max users) - 1 rows; plot about FIG3_POINTS of them
+    local sqrt point_step
+    sqrt=$(awk -v n="$rbe_max_users" 'BEGIN { print int(sqrt(n) + 0.5) }')
+    point_step=$(( (sqrt - 2) / FIG3_POINTS ))
+    (( point_step >= 1 )) || point_step=1
+    plot_fig fig3 "rbe-*.gpi" run "point_step=$point_step; xauto=1"
 }
 
 # Runs go test benchmarks (no tests) in a repo, showing the progress and
@@ -672,6 +736,14 @@ if [[ "$fig2_flag" == "true" ]]; then
         run_fig2
     else
         plot_fig fig2 "crypto-scheme-*.gpi"
+    fi
+fi
+
+if [[ "$fig3_flag" == "true" ]]; then
+    if [[ "$run_flag" == "true" ]]; then
+        run_fig3
+    else
+        plot_fig fig3 "rbe-*.gpi"
     fi
 fi
 
